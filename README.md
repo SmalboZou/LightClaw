@@ -1,0 +1,142 @@
+# LightClaw
+
+LightClaw is a lightweight personal AI agent framework inspired by OpenClaw-style systems.
+
+## Current State
+
+This repository currently includes:
+
+- a modular Python codebase under `src/lightclaw`
+- FastAPI and CLI entrypoints
+- SQLite-backed persistence
+- OpenAI-compatible, Anthropic, and mock providers
+- a schema-backed tool framework
+- Telegram integration
+- structured memory and extraction flow
+- jobs and scheduler support
+- declarative skills
+- manifest-backed MCP tool loading
+
+## Recommended Setup
+
+This project is now set up to use `uv` as the primary environment manager.
+
+On this machine, the validated workflow is:
+
+1. create and sync the isolated `.venv` with `uv`
+2. run the project from source with `PYTHONPATH=src`
+3. use the provided PowerShell scripts instead of manually activating environments
+
+## Quick Start on Windows PowerShell
+
+### 1. Initialize the isolated environment
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-init.ps1
+```
+
+What this does:
+
+- creates `.venv` with `uv`
+- creates `uv.lock` if needed
+- installs third-party dependencies with `uv sync --extra dev --no-install-project`
+- copies `.env.example` to `.env` if missing
+- runs database migrations
+
+### 2. Check database status
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 db status
+```
+
+Expected result:
+
+- `current_version` matches `latest_version`
+- `pending_versions=none`
+
+### 3. Start the API
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-api.ps1
+```
+
+Default local endpoint:
+
+- `http://127.0.0.1:8000`
+
+### 4. Test the CLI in another terminal
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 chat "hello"
+```
+
+Interactive CLI:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 repl
+```
+
+## Basic Verification
+
+Health check:
+
+```powershell
+curl http://127.0.0.1:8000/health
+```
+
+Chat request:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/chat `
+  -H "Content-Type: application/json" `
+  -d "{\"session_id\":\"demo\",\"user_id\":\"demo-user\",\"message\":\"hello\",\"channel\":\"api\"}"
+```
+
+List skills:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 skills list
+```
+
+Run a tool:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 chat "/tool echo.text hello-tool"
+```
+
+## Database Commands
+
+Migration files live under [src/lightclaw/infrastructure/persistence/migration_files](/E:/西电/研二/dmx/lightClaw/src/lightclaw/infrastructure/persistence/migration_files).
+
+Useful commands:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 db status
+powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 db migrate
+```
+
+## Tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+## Docker
+
+Build:
+
+```powershell
+docker build -t lightclaw:local .
+```
+
+Run:
+
+```powershell
+docker run --rm -p 8000:8000 lightclaw:local
+```
+
+## Additional Docs
+
+- Local runbook: [docs/planning/06-local-runbook.md](/E:/西电/研二/dmx/lightClaw/docs/planning/06-local-runbook.md)
+- Roadmap: [docs/planning/05-implementation-roadmap.md](/E:/西电/研二/dmx/lightClaw/docs/planning/05-implementation-roadmap.md)
+- Chinese README: [README.zh-CN.md](/E:/西电/研二/dmx/lightClaw/README.zh-CN.md)

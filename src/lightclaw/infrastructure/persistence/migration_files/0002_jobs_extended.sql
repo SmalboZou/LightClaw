@@ -1,0 +1,3 @@
+ALTER TABLE jobs ADD COLUMN target_destination VARCHAR(255);
+ALTER TABLE jobs ADD COLUMN last_run_at DATETIME;
+ALTER TABLE jobs ADD COLUMN last_output TEXT;

@@ -1,0 +1,9 @@
+id: writing_assistant
+name: Writing Assistant
+description: Helps produce concise structured writing and keeps tool usage limited to safe defaults.
+tools:
+  - echo.text
+  - filesystem.read
+dependencies:
+  env_vars: []
+  commands: []

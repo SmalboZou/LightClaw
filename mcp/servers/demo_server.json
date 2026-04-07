@@ -1,0 +1,43 @@
+{
+  "server_id": "demo",
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Return the provided text through the MCP adapter.",
+      "required_scope": "read_only",
+      "timeout_seconds": 5.0,
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "response_template": "mcp-echo:{text}"
+    },
+    {
+      "name": "netprobe",
+      "description": "A demo MCP tool that is classified as network access.",
+      "required_scope": "network_access",
+      "timeout_seconds": 5.0,
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "response_template": "network-probe:{text}"
+    }
+  ]
+}
