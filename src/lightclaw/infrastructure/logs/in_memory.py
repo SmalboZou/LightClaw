@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from lightclaw.domain.logs.base import ExecutionLogStore
 
 
@@ -11,6 +13,7 @@ class InMemoryExecutionLogStore(ExecutionLogStore):
                 "event_type": event_type,
                 "message": message,
                 "session_id": session_id or "",
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
 

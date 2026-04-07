@@ -3,6 +3,8 @@ from fastapi.responses import JSONResponse
 
 from lightclaw.domain.errors import (
     AgentLoopExceededError,
+    AuthenticationError,
+    AuthorizationError,
     JobDisabledError,
     JobNotFoundError,
     LightClawError,
@@ -25,6 +27,30 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=403,
             content=ErrorResponse(
                 error_code="policy_violation",
+                message=str(exc),
+            ).model_dump(),
+        )
+
+    @app.exception_handler(AuthenticationError)
+    async def handle_authentication_error(
+        request: Request, exc: AuthenticationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=401,
+            content=ErrorResponse(
+                error_code="authentication_error",
+                message=str(exc),
+            ).model_dump(),
+        )
+
+    @app.exception_handler(AuthorizationError)
+    async def handle_authorization_error(
+        request: Request, exc: AuthorizationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content=ErrorResponse(
+                error_code="authorization_error",
                 message=str(exc),
             ).model_dump(),
         )

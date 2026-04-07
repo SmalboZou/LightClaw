@@ -1,4 +1,7 @@
 from lightclaw.application.services.chat_service import ChatService
+from lightclaw.application.services.console_auth_service import ConsoleAuthService
+from lightclaw.application.services.console_ownership_service import ConsoleOwnershipService
+from lightclaw.application.services.config_service import ConfigService
 from lightclaw.application.services.job_service import JobService
 from lightclaw.application.services.memory_extraction_service import MemoryExtractionService
 from lightclaw.application.services.memory_service import MemoryService
@@ -33,7 +36,14 @@ class ApplicationContainer:
 
     def __init__(self, settings: AppSettings) -> None:
         self.settings = settings
+        metadata_root = settings.workspace_root / ".lightclaw"
+        self._metadata_root = metadata_root
         self.provider = _build_provider(settings)
+        self.config_service = ConfigService(settings.workspace_root / ".env", settings)
+        self.console_auth_service = ConsoleAuthService(metadata_root / "console_users.json", settings)
+        self.console_ownership_service = ConsoleOwnershipService(
+            metadata_root / "console_ownership.json"
+        )
         self.db_session_factory = None
         if settings.storage_backend == "sqlite":
             self.db_session_factory = create_session_factory(settings.database_url)
@@ -100,6 +110,56 @@ class ApplicationContainer:
             poll_seconds=settings.scheduler_poll_seconds,
         )
 
+    def reload_runtime(self, settings: AppSettings) -> None:
+        self.settings = settings
+        self.provider = _build_provider(settings)
+        self.config_service = ConfigService(settings.workspace_root / ".env", settings)
+        self.console_auth_service.update_settings(settings)
+        self.memory_extraction_service = MemoryExtractionService(
+            provider=self.provider,
+            memory_service=self.memory_service,
+        )
+        self.policy = ExecutionPolicy(
+            mode=settings.tool_policy,
+            workspace_root=settings.workspace_root,
+            allow_process_exec=settings.allow_process_exec,
+            allow_network_access=settings.allow_network_access,
+            allowed_commands=settings.allowed_commands,
+        )
+        self.chat_service = ChatService(
+            provider=self.provider,
+            session_store=self.session_store,
+            memory_service=self.memory_service,
+            memory_extraction_service=self.memory_extraction_service,
+            skill_service=self.skill_service,
+            tool_registry=self.tool_registry,
+            policy=self.policy,
+            execution_log_store=self.execution_log_store,
+            max_loops=settings.max_agent_loops,
+            provider_timeout_seconds=settings.provider_timeout_seconds,
+            tool_timeout_seconds=settings.tool_timeout_seconds,
+        )
+        self.telegram_sender = (
+            TelegramSender(settings.telegram_bot_token)
+            if settings.telegram_bot_token
+            else None
+        )
+        self.telegram_service = TelegramService(
+            chat_service=self.chat_service,
+            sender=self.telegram_sender,
+        )
+        self.job_service = JobService(
+            job_store=self.job_store,
+            chat_service=self.chat_service,
+            execution_log_store=self.execution_log_store,
+            telegram_sender=self.telegram_sender,
+        )
+        self.scheduler_service = SchedulerService(
+            job_service=self.job_service,
+            execution_log_store=self.execution_log_store,
+            poll_seconds=settings.scheduler_poll_seconds,
+        )
+
 
 def build_container(settings: AppSettings | None = None) -> ApplicationContainer:
     return ApplicationContainer(settings or AppSettings())
@@ -113,6 +173,7 @@ def _build_provider(settings: AppSettings):
                 model=settings.provider_model,
                 base_url=settings.provider_base_url or "https://api.openai.com/v1",
                 api_key=settings.provider_api_key,
+                extra_headers=settings.provider_extra_headers,
             )
         )
     if settings.provider_backend == "anthropic":

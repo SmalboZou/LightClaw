@@ -31,6 +31,7 @@ class SqlAlchemyExecutionLogStore(ExecutionLogStore):
                     "event_type": row.event_type,
                     "message": row.message,
                     "session_id": row.session_id or "",
+                    "created_at": row.created_at.isoformat(),
                 }
                 for row in rows
             ]

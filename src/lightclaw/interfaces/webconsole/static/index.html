@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LightClaw Console</title>
+    <link rel="stylesheet" href="/console/assets/app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">Product Console</p>
+          <h1>LightClaw</h1>
+          <p class="subtitle">Operate the agent without touching the terminal.</p>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-panel="setup">Setup</button>
+          <button class="nav-item" data-panel="chat">Chat</button>
+          <button class="nav-item" data-panel="sessions">Sessions</button>
+          <button class="nav-item" data-panel="jobs">Jobs</button>
+          <button class="nav-item" data-panel="skills">Skills</button>
+          <button class="nav-item" data-panel="tools">Tools</button>
+          <button class="nav-item" data-panel="logs">Logs</button>
+          <button class="nav-item" data-panel="system">System</button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operator Surface</p>
+            <h2 id="panel-title">Setup</h2>
+          </div>
+          <div class="topbar-actions">
+            <div class="muted" id="auth-user">Anonymous</div>
+            <button id="logout-button" type="button">Logout</button>
+            <div class="status-chip" id="global-status">Ready</div>
+          </div>
+        </header>
+
+        <section class="panel active" data-panel="setup">
+          <div class="panel-header">
+            <h3>Provider and Runtime</h3>
+            <p>Configure the active provider profile and execution policy.</p>
+          </div>
+          <form id="config-form" class="card form-grid">
+            <label>
+              <span>Provider backend</span>
+              <select name="provider_backend">
+                <option value="mock">mock</option>
+                <option value="openai_compatible">openai_compatible (OpenAI / OpenRouter / custom)</option>
+                <option value="anthropic">anthropic</option>
+              </select>
+            </label>
+            <label>
+              <span>Provider preset</span>
+              <select name="provider_preset" id="provider-preset">
+                <option value="">Custom</option>
+                <option value="openai">OpenAI</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </label>
+            <label>
+              <span>Model</span>
+              <input name="provider_model" placeholder="gpt-4o-mini" />
+            </label>
+            <label class="full">
+              <span>Base URL</span>
+              <input name="provider_base_url" placeholder="https://api.openai.com/v1" />
+            </label>
+            <label class="full">
+              <span>API key</span>
+              <input name="provider_api_key" type="password" placeholder="Paste a provider key to replace the current value" />
+              <small id="api-key-hint"></small>
+            </label>
+            <label class="full">
+              <span>Extra headers JSON</span>
+              <textarea name="provider_extra_headers_json" rows="4" placeholder="{&#10;  &quot;HTTP-Referer&quot;: &quot;https://your-app.example&quot;,&#10;  &quot;X-Title&quot;: &quot;LightClaw&quot;&#10;}"></textarea>
+              <small>Useful for OpenRouter or custom OpenAI-compatible gateways.</small>
+            </label>
+            <label>
+              <span>Storage backend</span>
+              <select name="storage_backend">
+                <option value="sqlite">sqlite</option>
+                <option value="memory">memory</option>
+              </select>
+            </label>
+            <label>
+              <span>Tool policy</span>
+              <select name="tool_policy">
+                <option value="workspace_write">workspace_write</option>
+                <option value="read_only">read_only</option>
+                <option value="full_access">full_access</option>
+              </select>
+            </label>
+            <label class="checkbox">
+              <input name="allow_process_exec" type="checkbox" />
+              <span>Allow process execution</span>
+            </label>
+            <label class="checkbox">
+              <input name="allow_network_access" type="checkbox" />
+              <span>Allow network access</span>
+            </label>
+            <div class="full key-value-grid">
+              <div>
+                <p class="meta-label">Workspace root</p>
+                <code id="workspace-root"></code>
+              </div>
+              <div>
+                <p class="meta-label">Skills root</p>
+                <code id="skills-root"></code>
+              </div>
+              <div>
+                <p class="meta-label">MCP root</p>
+                <code id="mcp-root"></code>
+              </div>
+            </div>
+            <div class="full actions">
+              <button type="submit" class="primary">Save Configuration</button>
+              <button type="button" id="test-provider">Test Provider</button>
+              <p class="hint">Saving updates the local `.env`. Restart the API process to apply changes.</p>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel" data-panel="chat">
+          <div class="panel-header">
+            <h3>Live Chat</h3>
+            <p>Talk to the runtime using the current provider, skills, memory, and tool stack.</p>
+          </div>
+          <div class="split-layout">
+            <form id="chat-form" class="card">
+              <label>
+                <span>Session ID</span>
+                <input name="session_id" value="console-session" />
+              </label>
+              <label>
+                <span>User ID</span>
+                <input name="user_id" value="console-user" />
+              </label>
+              <label>
+                <span>Message</span>
+                <textarea name="message" rows="5" placeholder="Ask something or invoke a tool through the provider."></textarea>
+              </label>
+              <fieldset>
+                <legend>Skills</legend>
+                <div id="chat-skills" class="pill-grid"></div>
+              </fieldset>
+              <div class="actions">
+                <button type="submit" class="primary">Send Message</button>
+              </div>
+            </form>
+            <div class="card">
+              <div class="section-title">
+                <h4>Transcript</h4>
+                <button id="refresh-sessions" type="button">Refresh Sessions</button>
+              </div>
+              <div id="chat-output" class="transcript empty">No messages yet.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="sessions">
+          <div class="panel-header">
+            <h3>Sessions</h3>
+            <p>Inspect stored conversations and open a session detail transcript.</p>
+          </div>
+          <div class="split-layout">
+            <div class="card">
+              <div class="section-title">
+                <h4>Recent Sessions</h4>
+                <button id="reload-sessions" type="button">Reload</button>
+              </div>
+              <div id="sessions-list" class="list-stack empty">No sessions yet.</div>
+            </div>
+            <div class="card">
+              <div class="section-title">
+                <h4>Session Detail</h4>
+                <span id="session-detail-title" class="muted">Select a session</span>
+              </div>
+              <div id="session-detail" class="transcript empty">No session selected.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="jobs">
+          <div class="panel-header">
+            <h3>Scheduled Jobs</h3>
+            <p>Create prompt-based jobs, run them manually, and inspect scheduler status.</p>
+          </div>
+          <div class="split-layout">
+            <form id="job-form" class="card">
+              <label>
+                <span>Job ID</span>
+                <input name="job_id" placeholder="nightly-summary" />
+              </label>
+              <label>
+                <span>Name</span>
+                <input name="name" placeholder="Nightly Summary" />
+              </label>
+              <label>
+                <span>Cron</span>
+                <input name="cron" value="0 9 * * *" />
+              </label>
+              <label>
+                <span>Target channel</span>
+                <input name="target_channel" value="scheduler" />
+              </label>
+              <label>
+                <span>Target destination</span>
+                <input name="target_destination" placeholder="telegram chat id or custom destination" />
+              </label>
+              <label>
+                <span>Policy mode</span>
+                <select name="policy_mode">
+                  <option value="workspace_write">workspace_write</option>
+                  <option value="read_only">read_only</option>
+                  <option value="full_access">full_access</option>
+                </select>
+              </label>
+              <label class="full">
+                <span>Prompt</span>
+                <textarea name="input_prompt" rows="4" placeholder="Summarize the latest changes in the workspace."></textarea>
+              </label>
+              <fieldset class="full">
+                <legend>Skills</legend>
+                <div id="job-skills" class="pill-grid"></div>
+              </fieldset>
+              <label class="checkbox">
+                <input name="enabled" type="checkbox" checked />
+                <span>Enabled</span>
+              </label>
+              <div class="actions full">
+                <button type="submit" class="primary">Save Job</button>
+              </div>
+            </form>
+            <div class="card">
+              <div class="section-title">
+                <h4>Job Inventory</h4>
+                <button id="reload-jobs" type="button">Reload</button>
+              </div>
+              <div class="scheduler-inline">
+                <button id="scheduler-start" type="button">Start Scheduler</button>
+                <button id="scheduler-stop" type="button">Stop Scheduler</button>
+                <button id="scheduler-tick" type="button">Run Tick</button>
+                <span id="scheduler-inline-status" class="muted"></span>
+              </div>
+              <div id="jobs-list" class="list-stack empty">No jobs configured.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="skills">
+          <div class="panel-header">
+            <h3>Skills</h3>
+            <p>Review packaged skills and understand which tools they expose.</p>
+          </div>
+          <div id="skills-list" class="card-grid empty">No skills available.</div>
+        </section>
+
+        <section class="panel" data-panel="tools">
+          <div class="panel-header">
+            <h3>Tools</h3>
+            <p>Inspect local and MCP tool definitions visible to the runtime.</p>
+          </div>
+          <div id="tools-list" class="card-grid empty">No tools registered.</div>
+        </section>
+
+        <section class="panel" data-panel="logs">
+          <div class="panel-header">
+            <h3>Execution Logs</h3>
+            <p>Observe runtime, scheduler, policy, and tool events.</p>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h4>Recent Events</h4>
+              <button id="reload-logs" type="button">Reload</button>
+            </div>
+            <div id="logs-list" class="list-stack empty">No execution logs yet.</div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="system">
+          <div class="panel-header">
+            <h3>System Status</h3>
+            <p>See the runtime profile, scheduler state, and schema migration health.</p>
+          </div>
+          <div id="system-grid" class="status-grid"></div>
+          <div class="split-layout top-gap">
+            <div class="card">
+              <div class="section-title">
+                <h4>Console Users</h4>
+                <button id="reload-users" type="button">Reload</button>
+              </div>
+              <div id="users-list" class="list-stack empty">No users loaded.</div>
+            </div>
+            <form id="user-form" class="card">
+              <div class="section-title">
+                <h4>Create User</h4>
+                <span class="muted">Admin only</span>
+              </div>
+              <label>
+                <span>Username</span>
+                <input name="username" placeholder="operator-1" />
+              </label>
+              <label>
+                <span>Password</span>
+                <input name="password" type="password" />
+              </label>
+              <label>
+                <span>Role</span>
+                <select name="role">
+                  <option value="operator">operator</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+              <div class="actions">
+                <button type="submit" class="primary">Create User</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="overlay hidden" id="setup-overlay">
+      <div class="overlay-card">
+        <p class="eyebrow dark">First Launch</p>
+        <h3>Bootstrap LightClaw</h3>
+        <p>Create the first console admin and configure the initial provider profile.</p>
+        <form id="setup-form" class="form-grid">
+          <label>
+            <span>Admin username</span>
+            <input name="admin_username" value="admin" />
+          </label>
+          <label>
+            <span>Admin password</span>
+            <input name="admin_password" type="password" />
+          </label>
+            <label>
+              <span>Provider backend</span>
+              <select name="provider_backend">
+                <option value="mock">mock</option>
+                <option value="openai_compatible">openai_compatible (OpenAI / OpenRouter / custom)</option>
+                <option value="anthropic">anthropic</option>
+              </select>
+            </label>
+          <label>
+            <span>Provider preset</span>
+            <select name="provider_preset" id="setup-provider-preset">
+              <option value="">Custom</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label>
+            <span>Model</span>
+            <input name="provider_model" value="gpt-4o-mini" />
+          </label>
+          <label class="full">
+            <span>Base URL</span>
+            <input name="provider_base_url" placeholder="https://api.openai.com/v1" />
+          </label>
+          <label class="full">
+            <span>API key</span>
+            <input name="provider_api_key" type="password" />
+          </label>
+          <label class="full">
+            <span>Extra headers JSON</span>
+            <textarea name="provider_extra_headers_json" rows="4" placeholder="{&#10;  &quot;HTTP-Referer&quot;: &quot;https://your-app.example&quot;,&#10;  &quot;X-Title&quot;: &quot;LightClaw&quot;&#10;}"></textarea>
+          </label>
+          <div class="actions full">
+            <button type="submit" class="primary">Complete Setup</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="overlay hidden" id="login-overlay">
+      <div class="overlay-card small">
+        <p class="eyebrow dark">Console Login</p>
+        <h3>Sign in</h3>
+        <p>Use a local console account to access sessions, jobs, and configuration.</p>
+        <form id="login-form">
+          <label>
+            <span>Username</span>
+            <input name="username" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" />
+          </label>
+          <div class="actions top-gap">
+            <button type="submit" class="primary">Login</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script src="/console/assets/app.js" defer></script>
+  </body>
+</html>

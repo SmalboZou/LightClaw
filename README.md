@@ -64,6 +64,43 @@ Default local endpoint:
 
 - `http://127.0.0.1:8000`
 
+### 3.1 Open the Web Console
+
+After the API is running, open:
+
+- `http://127.0.0.1:8000/console`
+
+The console provides:
+
+- provider and runtime setup
+- browser-based chat
+- first-run bootstrap and local login
+- streaming chat output
+- session history inspection
+- scheduled job management
+- local user management and per-user console isolation
+- skills and tools inventory
+- provider connection testing
+- execution log viewing
+- system and migration status
+
+`openai_compatible` means "OpenAI-style API schema", not "OpenAI only".
+You can use it with:
+
+- OpenAI
+- OpenRouter
+- self-hosted or third-party OpenAI-compatible gateways
+
+OpenRouter example:
+
+```env
+LIGHTCLAW_PROVIDER_BACKEND=openai_compatible
+LIGHTCLAW_PROVIDER_BASE_URL=https://openrouter.ai/api/v1
+LIGHTCLAW_PROVIDER_MODEL=openai/gpt-4o-mini
+LIGHTCLAW_PROVIDER_API_KEY=your-openrouter-key
+LIGHTCLAW_PROVIDER_EXTRA_HEADERS_JSON={"HTTP-Referer":"https://your-app.example","X-Title":"LightClaw"}
+```
+
 ### 4. Test the CLI in another terminal
 
 ```powershell

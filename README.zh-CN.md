@@ -66,6 +66,44 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run-api.ps1
 
 - `http://127.0.0.1:8000`
 
+### 3.1 打开前端控制台
+
+启动 API 后，直接打开：
+
+- `http://127.0.0.1:8000/console`
+
+当前控制台已经支持：
+
+- 配置 provider 和运行策略
+- 首次启动向导和本地登录
+- 在浏览器里直接聊天
+- 流式对话输出
+- 查看会话历史
+- 管理 jobs 和 scheduler
+- 本地用户管理和按用户隔离的控制台资源
+- 查看 skills 与 tools
+- provider 连通性测试
+- 查看执行日志
+- 查看系统与 migration 状态
+
+这里的 `openai_compatible` 意思是“兼容 OpenAI API 格式”，不是“只能接 OpenAI 官方”。
+
+因此它可以接：
+
+- OpenAI
+- OpenRouter
+- 自建或第三方 OpenAI-compatible 网关
+
+例如接 OpenRouter 时，可以这样配：
+
+```env
+LIGHTCLAW_PROVIDER_BACKEND=openai_compatible
+LIGHTCLAW_PROVIDER_BASE_URL=https://openrouter.ai/api/v1
+LIGHTCLAW_PROVIDER_MODEL=openai/gpt-4o-mini
+LIGHTCLAW_PROVIDER_API_KEY=你的 OpenRouter Key
+LIGHTCLAW_PROVIDER_EXTRA_HEADERS_JSON={"HTTP-Referer":"https://your-app.example","X-Title":"LightClaw"}
+```
+
 ### 4. 在另一个终端测试 CLI
 
 ```powershell
