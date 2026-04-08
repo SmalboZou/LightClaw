@@ -49,6 +49,10 @@ def test_job_service_runs_persisted_job() -> None:
         stored = asyncio.run(container.job_service.get_job("job-1"))
         assert stored is not None
         assert stored.last_status == "completed"
+        runs = asyncio.run(container.job_service.list_job_runs("job-1"))
+        events = asyncio.run(container.execution_log_store.list_events(run_id=runs[0].run_id))
+        assert len(runs) == 1
+        assert all(event["run_id"] == runs[0].run_id for event in events)
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
 
@@ -132,6 +136,40 @@ def test_scheduler_tick_deduplicates_same_minute() -> None:
 
         assert len(first) == 1
         assert second == []
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_runtime_reload_preserves_running_scheduler_state() -> None:
+    workspace = _make_test_workspace()
+    database_url = f"sqlite:///{(workspace / 'lightclaw.db').as_posix()}"
+    settings = AppSettings(
+        storage_backend="sqlite",
+        database_url=database_url,
+        workspace_root=workspace,
+        provider_backend="mock",
+        scheduler_poll_seconds=30,
+    )
+
+    async def _run() -> None:
+        container = build_container(settings)
+        await container.scheduler_service.start()
+        await container.reload_runtime(
+            AppSettings(
+                storage_backend="sqlite",
+                database_url=database_url,
+                workspace_root=workspace,
+                provider_backend="mock",
+                scheduler_poll_seconds=15,
+            )
+        )
+        status = container.scheduler_service.status()
+        assert status["running"] is True
+        assert status["poll_seconds"] == 15
+        await container.scheduler_service.stop()
+
+    try:
+        asyncio.run(_run())
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
 

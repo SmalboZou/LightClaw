@@ -439,6 +439,14 @@ code {
   color: #8a2e2e;
 }
 
+.warning {
+  color: #9a6a19;
+}
+
+.status-card code {
+  margin-top: 8px;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

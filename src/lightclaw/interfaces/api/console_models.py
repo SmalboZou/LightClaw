@@ -44,6 +44,39 @@ class ConsoleConfigUpdateResponse(BaseModel):
     updated_keys: list[str] = Field(default_factory=list)
 
 
+class RuntimeConfigSummaryResponse(BaseModel):
+    provider_backend: str
+    provider_model: str
+    provider_base_url: str | None = None
+    storage_backend: str
+    tool_policy: str
+    allow_process_exec: bool
+    allow_network_access: bool
+
+
+class ConsoleRuntimeStatusResponse(BaseModel):
+    active: RuntimeConfigSummaryResponse
+    desired: RuntimeConfigSummaryResponse
+    desired_matches_active: bool
+    last_applied_at: str | None = None
+    last_reload_reason: str | None = None
+
+
+class ConsoleRuntimeReloadResponse(BaseModel):
+    reloaded: bool
+    scheduler_running: bool
+    provider_backend: str
+    provider_model: str
+
+
+class ProviderCapabilitiesResponse(BaseModel):
+    backend: str
+    model: str | None = None
+    supports_tools: bool
+    supports_streaming: bool
+    supports_usage_reporting: bool
+
+
 class SessionSummaryResponse(BaseModel):
     session_id: str
     turn_count: int
@@ -55,6 +88,12 @@ class SessionSummaryResponse(BaseModel):
 class SessionDetailResponse(BaseModel):
     session_id: str
     turns: list[AgentTurn] = Field(default_factory=list)
+
+
+class SessionDiagnosticsResponse(BaseModel):
+    session_id: str
+    turns: list[AgentTurn] = Field(default_factory=list)
+    events: list["ExecutionLogResponse"] = Field(default_factory=list)
 
 
 class ExecutionLogResponse(BaseModel):
@@ -151,3 +190,24 @@ class ConsoleChatPayload(BaseModel):
     session_id: str = "console-session"
     message: str
     skills: list[str] = Field(default_factory=list)
+
+
+class JobRunResponse(BaseModel):
+    run_id: str
+    job_id: str
+    trigger: str
+    status: str
+    input_prompt: str
+    output_text: str | None = None
+    error_message: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class JobRunDiagnosticsResponse(BaseModel):
+    run: JobRunResponse
+    session_id: str
+    events: list[ExecutionLogResponse] = Field(default_factory=list)
+
+
+SessionDiagnosticsResponse.model_rebuild()

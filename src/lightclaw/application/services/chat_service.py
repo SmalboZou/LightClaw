@@ -25,6 +25,7 @@ class ChatService:
         provider_timeout_seconds: float = 15.0,
         tool_timeout_seconds: float = 10.0,
     ) -> None:
+        self._execution_log_store = execution_log_store
         self._runtime = AgentRuntime(
             provider=provider,
             session_store=session_store,
@@ -42,6 +43,12 @@ class ChatService:
 
     async def chat(self, request: AgentRequest) -> AgentResponse:
         skill_context = await self._skill_service.resolve_context(request.skills)
+        if request.skills:
+            await self._execution_log_store.record(
+                event_type="skills_activated",
+                message=f"skills={','.join(request.skills)}",
+                session_id=request.session_id,
+            )
         tool_registry = await self._skill_service.apply_tool_context(
             self._tool_registry,
             skill_context,
@@ -51,10 +58,22 @@ class ChatService:
             tool_registry=tool_registry,
             instructions=skill_context.prompt_fragments,
         )
-        await self._memory_extraction_service.extract_and_remember(
-            user_id=request.user_id,
-            session_id=request.session_id,
-            user_message=request.message,
-            assistant_reply=response.reply,
-        )
+        try:
+            written = await self._memory_extraction_service.extract_and_remember(
+                user_id=request.user_id,
+                session_id=request.session_id,
+                user_message=request.message,
+                assistant_reply=response.reply,
+            )
+            await self._execution_log_store.record(
+                event_type="memory_extraction_completed",
+                message=f"stored={written}",
+                session_id=request.session_id,
+            )
+        except Exception as exc:
+            await self._execution_log_store.record(
+                event_type="memory_extraction_failed",
+                message=str(exc),
+                session_id=request.session_id,
+            )
         return response

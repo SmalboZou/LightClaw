@@ -16,7 +16,6 @@ from lightclaw.infrastructure.providers.anthropic import AnthropicProvider
 from lightclaw.infrastructure.persistence.database import get_migration_status
 from lightclaw.infrastructure.providers.mock import MockProvider
 from lightclaw.infrastructure.providers.openai_compatible import OpenAICompatibleProvider
-from lightclaw.infrastructure.tools.registry import InMemoryToolRegistry
 from lightclaw.interfaces.api.console_models import (
     ConsoleAuthPayload,
     ConsoleAuthResponse,
@@ -28,9 +27,16 @@ from lightclaw.interfaces.api.console_models import (
     ConsoleCreateUserPayload,
     ConsoleProviderTestPayload,
     ConsoleProviderTestResponse,
+    ConsoleRuntimeReloadResponse,
+    ConsoleRuntimeStatusResponse,
     ConsoleSetupStatusResponse,
     ConsoleSystemStatusResponse,
     ExecutionLogResponse,
+    JobRunResponse,
+    JobRunDiagnosticsResponse,
+    ProviderCapabilitiesResponse,
+    RuntimeConfigSummaryResponse,
+    SessionDiagnosticsResponse,
     SessionDetailResponse,
     SessionSummaryResponse,
     ToolDefinitionResponse,
@@ -142,7 +148,7 @@ def create_api(
                 "console_admin_password": payload.admin_password,
             }
         )
-        container.reload_runtime(
+        await container.reload_runtime(
             AppSettings(
                 workspace_root=settings.workspace_root,
                 _env_file=settings.workspace_root / ".env",
@@ -238,6 +244,46 @@ def create_api(
         _require_console_user(lightclaw_console_session)
         return ConsoleConfigResponse(**(await container.config_service.get_console_config()))
 
+    @router.get("/console/api/runtime/status")
+    async def console_runtime_status(
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> ConsoleRuntimeStatusResponse:
+        _require_console_user(lightclaw_console_session)
+        payload = await container.config_service.get_runtime_status()
+        return ConsoleRuntimeStatusResponse(
+            active=RuntimeConfigSummaryResponse(**payload["active"]),
+            desired=RuntimeConfigSummaryResponse(**payload["desired"]),
+            desired_matches_active=bool(payload["desired_matches_active"]),
+            last_applied_at=payload["last_applied_at"],
+            last_reload_reason=payload["last_reload_reason"],
+        )
+
+    @router.post("/console/api/runtime/reload")
+    async def console_runtime_reload(
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> ConsoleRuntimeReloadResponse:
+        _require_console_user(lightclaw_console_session)
+        await container.reload_runtime(
+            AppSettings(
+                workspace_root=settings.workspace_root,
+                _env_file=settings.workspace_root / ".env",
+            )
+        )
+        return ConsoleRuntimeReloadResponse(
+            reloaded=True,
+            scheduler_running=bool(container.scheduler_service.status()["running"]),
+            provider_backend=container.settings.provider_backend,
+            provider_model=container.settings.provider_model,
+        )
+
+    @router.get("/console/api/provider/capabilities")
+    async def console_provider_capabilities(
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> ProviderCapabilitiesResponse:
+        _require_console_user(lightclaw_console_session)
+        profile = container.provider.profile()
+        return ProviderCapabilitiesResponse(**profile.model_dump())
+
     @router.post("/console/api/config")
     async def console_save_config(
         payload: ConsoleConfigUpdatePayload,
@@ -246,7 +292,7 @@ def create_api(
         _require_console_user(lightclaw_console_session)
         result = await container.config_service.save_console_config(payload.model_dump())
         if not result["requires_restart"]:
-            container.reload_runtime(
+            await container.reload_runtime(
                 AppSettings(
                     workspace_root=settings.workspace_root,
                     _env_file=settings.workspace_root / ".env",
@@ -319,6 +365,21 @@ def create_api(
         turns = await container.session_store.get_history(session_id)
         return SessionDetailResponse(session_id=session_id, turns=turns)
 
+    @router.get("/console/api/sessions/{session_id}/events")
+    async def console_session_events(
+        session_id: str,
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> SessionDiagnosticsResponse:
+        user = _require_console_user(lightclaw_console_session)
+        container.console_ownership_service.ensure_session_access(session_id, user["username"])
+        turns = await container.session_store.get_history(session_id)
+        events = await container.execution_log_store.list_events(session_id=session_id)
+        return SessionDiagnosticsResponse(
+            session_id=session_id,
+            turns=turns,
+            events=[ExecutionLogResponse(**event) for event in events],
+        )
+
     @router.get("/console/api/logs")
     async def console_logs(
         session_id: str | None = None,
@@ -337,12 +398,13 @@ def create_api(
         _require_console_user(lightclaw_console_session)
         migration_status = get_migration_status(settings.database_url)
         scheduler_status = container.scheduler_service.status()
+        active_settings = container.settings
         return ConsoleSystemStatusResponse(
             app_name=settings.app_name,
             env=settings.env,
-            storage_backend=settings.storage_backend,
-            provider_backend=settings.provider_backend,
-            provider_model=settings.provider_model,
+            storage_backend=active_settings.storage_backend,
+            provider_backend=active_settings.provider_backend,
+            provider_model=active_settings.provider_model,
             scheduler_running=bool(scheduler_status["running"]),
             scheduler_poll_seconds=int(scheduler_status["poll_seconds"]),
             current_schema_version=migration_status["current_version"],
@@ -477,6 +539,43 @@ def create_api(
             )
         )
         return [_job_to_response(job) for job in jobs if job.job_id in owned_ids]
+
+    @router.get("/console/api/job-runs")
+    async def console_list_job_runs(
+        job_id: str | None = None,
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> list[JobRunResponse]:
+        user = _require_console_user(lightclaw_console_session)
+        if job_id is not None:
+            container.console_ownership_service.ensure_job_access(job_id, user["username"])
+        runs = await container.job_service.list_job_runs(job_id)
+        owned_job_ids = set(
+            container.console_ownership_service.list_owned_jobs(
+                list({run.job_id for run in runs}),
+                user["username"],
+            )
+        )
+        return [
+            JobRunResponse(**run.model_dump())
+            for run in runs
+            if run.job_id in owned_job_ids
+        ]
+
+    @router.get("/console/api/job-runs/{run_id}")
+    async def console_get_job_run(
+        run_id: str,
+        lightclaw_console_session: str | None = Cookie(default=None),
+    ) -> JobRunDiagnosticsResponse:
+        user = _require_console_user(lightclaw_console_session)
+        run = await container.job_service.get_job_run(run_id)
+        container.console_ownership_service.ensure_job_access(run.job_id, user["username"])
+        session_id = f"job:{run.job_id}"
+        events = await container.execution_log_store.list_events(session_id=session_id, run_id=run.run_id)
+        return JobRunDiagnosticsResponse(
+            run=JobRunResponse(**run.model_dump()),
+            session_id=session_id,
+            events=[ExecutionLogResponse(**event) for event in events],
+        )
 
     @router.post("/jobs")
     async def upsert_job(payload: JobPayload) -> JobResponse:

@@ -57,12 +57,24 @@ Expected result:
 ### 3. Start the API
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-api.ps1
+.\scripts\run-api.cmd
 ```
 
-Default local endpoint:
+This command starts Uvicorn in the foreground. That is expected: the terminal will stay occupied while the API is running.
 
-- `http://127.0.0.1:8000`
+The validated startup command behind `run-api.cmd` is:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn lightclaw.main:app --factory --host 127.0.0.1 --port 8000 --app-dir .\src
+```
+
+The API is ready only after Uvicorn prints `Uvicorn running on http://127.0.0.1:8000`.
+
+Default local endpoints:
+
+- `http://127.0.0.1:8000/health`
+- `http://127.0.0.1:8000/console`
+- `http://127.0.0.1:8000/docs`
 
 ### 3.1 Open the Web Console
 
@@ -120,6 +132,8 @@ Health check:
 ```powershell
 curl http://127.0.0.1:8000/health
 ```
+
+If you are unsure whether the API is really up, check for the `Uvicorn running` line in the API terminal or verify that port `8000` is listening in another terminal.
 
 Chat request:
 

@@ -7,6 +7,7 @@ from lightclaw.config.settings import AppSettings
 from lightclaw.bootstrap import build_container
 from lightclaw.domain.errors import ProviderRequestError
 from lightclaw.interfaces.api.app import create_api
+from lightclaw.interfaces.common import create_interface_context
 
 
 def _fresh_workspace(name: str) -> Path:
@@ -34,6 +35,26 @@ def _bootstrap_console(client: TestClient) -> None:
         },
     )
     assert response.status_code == 200
+
+
+def _bootstrap_console_with_response(client: TestClient):
+    response = client.post(
+        "/console/api/setup/bootstrap",
+        json={
+            "admin_username": "admin",
+            "admin_password": "secret-pass",
+            "provider_backend": "mock",
+            "provider_model": "mock",
+            "provider_base_url": None,
+            "provider_api_key": None,
+            "storage_backend": "sqlite",
+            "tool_policy": "workspace_write",
+            "allow_process_exec": False,
+            "allow_network_access": False,
+        },
+    )
+    assert response.status_code == 200
+    return response
 
 
 def test_health_endpoint() -> None:
@@ -260,6 +281,37 @@ def test_console_config_save_keeps_auth_session_alive() -> None:
     assert config_response.status_code == 200
 
 
+def test_console_auth_session_persists_across_sqlite_container_rebuild() -> None:
+    workspace = _fresh_workspace("api-console-auth-sqlite-rebuild")
+    settings = AppSettings(
+        storage_backend="sqlite",
+        workspace_root=workspace,
+        provider_backend="mock",
+        console_admin_username="",
+        console_admin_password="",
+    )
+    client = TestClient(create_api(settings))
+    bootstrap_response = _bootstrap_console_with_response(client)
+    token = bootstrap_response.cookies.get("lightclaw_console_session")
+
+    rebuilt_client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                provider_backend="mock",
+                console_admin_username="",
+                console_admin_password="",
+            )
+        )
+    )
+    rebuilt_client.cookies.set("lightclaw_console_session", token)
+    me_response = rebuilt_client.get("/console/api/auth/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["authenticated"] is True
+
+
 def test_console_provider_test_reuses_saved_key_when_input_is_blank() -> None:
     workspace = _fresh_workspace("api-console-provider-fallback")
     client = TestClient(
@@ -320,6 +372,151 @@ def test_console_provider_test_uses_active_runtime_settings_after_hot_reload() -
     assert response.json()["backend"] == "mock"
 
 
+def test_console_runtime_status_reflects_active_and_desired_config() -> None:
+    workspace = _fresh_workspace("api-console-runtime-status")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                provider_backend="mock",
+                console_admin_username="",
+                console_admin_password="",
+            )
+        )
+    )
+    _bootstrap_console(client)
+
+    save_response = client.post(
+        "/console/api/config",
+        json={
+            "provider_backend": "mock",
+            "provider_model": "runtime-status-model",
+            "provider_base_url": "",
+            "provider_extra_headers_json": "",
+            "provider_api_key": "",
+            "storage_backend": "sqlite",
+            "tool_policy": "workspace_write",
+            "allow_process_exec": False,
+            "allow_network_access": False,
+        },
+    )
+    runtime_response = client.get("/console/api/runtime/status")
+
+    assert save_response.status_code == 200
+    assert runtime_response.status_code == 200
+    payload = runtime_response.json()
+    assert payload["desired_matches_active"] is True
+    assert payload["active"]["provider_model"] == "runtime-status-model"
+    assert payload["last_reload_reason"] == "hot_reload"
+    assert payload["last_applied_at"]
+
+
+def test_console_runtime_reload_endpoint_reloads_active_runtime() -> None:
+    workspace = _fresh_workspace("api-console-runtime-reload")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                provider_backend="mock",
+                console_admin_username="",
+                console_admin_password="",
+            )
+        )
+    )
+    _bootstrap_console(client)
+    client.post(
+        "/console/api/config",
+        json={
+            "provider_backend": "mock",
+            "provider_model": "runtime-reloaded-model",
+            "provider_base_url": "",
+            "provider_extra_headers_json": "",
+            "provider_api_key": "",
+            "storage_backend": "sqlite",
+            "tool_policy": "workspace_write",
+            "allow_process_exec": False,
+            "allow_network_access": False,
+        },
+    )
+
+    response = client.post("/console/api/runtime/reload")
+
+    assert response.status_code == 200
+    assert response.json()["reloaded"] is True
+    assert response.json()["provider_model"] == "runtime-reloaded-model"
+
+
+def test_console_provider_capabilities_reflect_active_provider_profile() -> None:
+    workspace = _fresh_workspace("api-console-provider-capabilities")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="memory",
+                workspace_root=workspace,
+                provider_backend="mock",
+                console_admin_username="",
+                console_admin_password="",
+            )
+        )
+    )
+    _bootstrap_console(client)
+
+    response = client.get("/console/api/provider/capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["backend"] == "mock"
+    assert payload["supports_tools"] is True
+
+
+def test_interface_context_prefers_runtime_config_from_database() -> None:
+    workspace = _fresh_workspace("api-runtime-db-precedence")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                provider_backend="mock",
+                console_admin_username="",
+                console_admin_password="",
+            )
+        )
+    )
+    _bootstrap_console(client)
+    save_response = client.post(
+        "/console/api/config",
+        json={
+            "provider_backend": "mock",
+            "provider_model": "db-priority-model",
+            "provider_base_url": "",
+            "provider_extra_headers_json": "",
+            "provider_api_key": "",
+            "storage_backend": "sqlite",
+            "tool_policy": "workspace_write",
+            "allow_process_exec": False,
+            "allow_network_access": False,
+        },
+    )
+    (workspace / ".env").write_text(
+        "LIGHTCLAW_STORAGE_BACKEND=sqlite\nLIGHTCLAW_PROVIDER_BACKEND=mock\nLIGHTCLAW_PROVIDER_MODEL=stale-env-model\n",
+        encoding="utf-8",
+    )
+
+    resolved_settings, _container = create_interface_context(
+        AppSettings(
+            storage_backend="sqlite",
+            workspace_root=workspace,
+            provider_backend="mock",
+            _env_file=workspace / ".env",
+        )
+    )
+
+    assert save_response.status_code == 200
+    assert resolved_settings.provider_model == "db-priority-model"
+
+
 def test_console_system_and_sessions_endpoints() -> None:
     workspace = _fresh_workspace("api-console-system")
     client = TestClient(
@@ -353,6 +550,120 @@ def test_console_system_and_sessions_endpoints() -> None:
     assert sessions_response.json()[0]["session_id"] == "console-session"
     assert detail_response.status_code == 200
     assert len(detail_response.json()["turns"]) >= 2
+
+
+def test_console_session_events_endpoint_returns_timeline() -> None:
+    workspace = _fresh_workspace("api-console-session-events")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="memory",
+                workspace_root=workspace,
+                console_admin_username="",
+                console_admin_password="",
+                provider_backend="mock",
+            )
+        )
+    )
+    _bootstrap_console(client)
+    client.post(
+        "/console/api/chat",
+        json={
+            "session_id": "timeline-session",
+            "message": "/tool echo.text timeline",
+            "skills": [],
+        },
+    )
+
+    response = client.get("/console/api/sessions/timeline-session/events")
+
+    assert response.status_code == 200
+    payload = response.json()
+    event_types = [event["event_type"] for event in payload["events"]]
+    assert payload["session_id"] == "timeline-session"
+    assert "agent_run_started" in event_types
+    assert "tool_execution_started" in event_types
+
+
+def test_console_job_runs_endpoint_returns_history() -> None:
+    workspace = _fresh_workspace("api-console-job-runs")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                console_admin_username="",
+                console_admin_password="",
+                provider_backend="mock",
+            )
+        )
+    )
+    _bootstrap_console(client)
+    create_response = client.post(
+        "/console/api/jobs",
+        json={
+            "job_id": "job-history",
+            "name": "Job History",
+            "cron": "* * * * *",
+            "enabled": True,
+            "input_prompt": "hello from job",
+            "target_channel": "scheduler",
+            "target_destination": None,
+            "skills": [],
+            "policy_mode": "workspace_write",
+        },
+    )
+    run_response = client.post("/console/api/jobs/job-history/run")
+    runs_response = client.get("/console/api/job-runs", params={"job_id": "job-history"})
+
+    assert create_response.status_code == 200
+    assert run_response.status_code == 200
+    assert runs_response.status_code == 200
+    payload = runs_response.json()
+    assert len(payload) == 1
+    assert payload[0]["job_id"] == "job-history"
+    assert payload[0]["status"] == "completed"
+
+
+def test_console_job_run_detail_returns_related_events() -> None:
+    workspace = _fresh_workspace("api-console-job-run-detail")
+    client = TestClient(
+        create_api(
+            AppSettings(
+                storage_backend="sqlite",
+                workspace_root=workspace,
+                console_admin_username="",
+                console_admin_password="",
+                provider_backend="mock",
+            )
+        )
+    )
+    _bootstrap_console(client)
+    client.post(
+        "/console/api/jobs",
+        json={
+            "job_id": "job-detail",
+            "name": "Job Detail",
+            "cron": "* * * * *",
+            "enabled": True,
+            "input_prompt": "hello from detailed job",
+            "target_channel": "scheduler",
+            "target_destination": None,
+            "skills": [],
+            "policy_mode": "workspace_write",
+        },
+    )
+    client.post("/console/api/jobs/job-detail/run")
+    runs_response = client.get("/console/api/job-runs", params={"job_id": "job-detail"})
+    run_id = runs_response.json()[0]["run_id"]
+
+    detail_response = client.get(f"/console/api/job-runs/{run_id}")
+
+    assert detail_response.status_code == 200
+    payload = detail_response.json()
+    assert payload["run"]["run_id"] == run_id
+    event_types = [event["event_type"] for event in payload["events"]]
+    assert "job_started" in event_types
 
 
 def test_console_requires_setup_then_login() -> None:

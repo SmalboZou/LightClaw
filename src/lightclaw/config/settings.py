@@ -58,13 +58,18 @@ class AppSettings(BaseModel):
 
     def __init__(self, **data: object) -> None:
         env_file_override = data.pop("_env_file", None)
-        resolved_env_file = Path(env_file_override) if env_file_override else None
+        resolved_env_file = Path(env_file_override) if env_file_override else Path(".env")
+        prefer_file_values = env_file_override is not None
         file_values = _read_dotenv(resolved_env_file)
 
         def _value(name: str, default: str | None = None) -> str | None:
-            if resolved_env_file is not None and name in file_values:
+            if prefer_file_values and name in file_values:
                 return file_values[name]
-            return os.getenv(name, default)
+            if name in os.environ:
+                return os.environ[name]
+            if name in file_values:
+                return file_values[name]
+            return default
 
         merged = {
             "app_name": _value("LIGHTCLAW_APP_NAME", "LightClaw"),

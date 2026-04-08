@@ -30,6 +30,10 @@ class JobDisabledError(LightClawError):
     """Raised when a requested job is disabled."""
 
 
+class JobRunNotFoundError(LightClawError):
+    """Raised when a requested job run does not exist."""
+
+
 class SkillNotFoundError(LightClawError):
     """Raised when a requested skill package does not exist."""
 

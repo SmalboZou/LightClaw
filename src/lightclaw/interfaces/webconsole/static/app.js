@@ -2,10 +2,13 @@ const state = {
   auth: { authenticated: false, user: null },
   setup: null,
   config: null,
+  runtime: null,
+  providerCapabilities: null,
   skills: [],
   tools: [],
   sessions: [],
   jobs: [],
+  jobRuns: [],
   logs: [],
   system: null,
   users: [],
@@ -72,6 +75,8 @@ function bindActions() {
   document.getElementById("reload-jobs").addEventListener("click", refreshJobs);
   document.getElementById("reload-logs").addEventListener("click", refreshLogs);
   document.getElementById("reload-users").addEventListener("click", refreshUsers);
+  document.getElementById("reload-runtime-status").addEventListener("click", refreshRuntimeStatus);
+  document.getElementById("reload-runtime").addEventListener("click", reloadRuntime);
   document.getElementById("scheduler-start").addEventListener("click", () => controlScheduler("start"));
   document.getElementById("scheduler-stop").addEventListener("click", () => controlScheduler("stop"));
   document.getElementById("scheduler-tick").addEventListener("click", () => controlScheduler("tick"));
@@ -88,8 +93,11 @@ async function refreshAll() {
     refreshTools(),
     refreshSessions(),
     refreshJobs(),
+    refreshJobRuns(),
     refreshLogs(),
     refreshSystem(),
+    refreshRuntimeStatus(),
+    refreshProviderCapabilities(),
     refreshUsers(),
   ]);
   setStatus("Console ready.");
@@ -181,6 +189,93 @@ async function refreshSkills() {
   );
 }
 
+async function refreshRuntimeStatus() {
+  state.runtime = await api("/console/api/runtime/status");
+  const syncBadge = document.getElementById("runtime-sync-badge");
+  const synchronized = state.runtime.desired_matches_active;
+  syncBadge.textContent = synchronized ? "synchronized" : "drift detected";
+  syncBadge.classList.toggle("warning", !synchronized);
+  syncBadge.classList.toggle("success", synchronized);
+
+  const items = [
+    [
+      "Provider",
+      `${state.runtime.active.provider_backend} / ${state.runtime.active.provider_model}`,
+      `${state.runtime.desired.provider_backend} / ${state.runtime.desired.provider_model}`,
+    ],
+    [
+      "Base URL",
+      state.runtime.active.provider_base_url || "default",
+      state.runtime.desired.provider_base_url || "default",
+    ],
+    [
+      "Storage",
+      state.runtime.active.storage_backend,
+      state.runtime.desired.storage_backend,
+    ],
+    [
+      "Tool policy",
+      state.runtime.active.tool_policy,
+      state.runtime.desired.tool_policy,
+    ],
+    [
+      "Process exec",
+      String(state.runtime.active.allow_process_exec),
+      String(state.runtime.desired.allow_process_exec),
+    ],
+    [
+      "Network access",
+      String(state.runtime.active.allow_network_access),
+      String(state.runtime.desired.allow_network_access),
+    ],
+    [
+      "Last applied",
+      formatTime(state.runtime.last_applied_at),
+      state.runtime.last_reload_reason || "unknown",
+    ],
+  ];
+  document.getElementById("runtime-status-grid").innerHTML = items
+    .map(
+      ([label, active, desired]) => `
+        <article class="status-card">
+          <p class="meta-label">${escapeHtml(label)}</p>
+          <p><strong>Active:</strong> ${escapeHtml(active)}</p>
+          <p><strong>Desired:</strong> ${escapeHtml(desired)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+async function reloadRuntime() {
+  const result = await api("/console/api/runtime/reload", { method: "POST" });
+  setStatus(
+    `Runtime reloaded: ${result.provider_backend} / ${result.provider_model}`
+  );
+  await Promise.all([refreshRuntimeStatus(), refreshProviderCapabilities(), refreshSystem()]);
+}
+
+async function refreshProviderCapabilities() {
+  state.providerCapabilities = await api("/console/api/provider/capabilities");
+  const badge = document.getElementById("provider-capability-badge");
+  badge.textContent = `${state.providerCapabilities.backend} / ${state.providerCapabilities.model || "default"}`;
+  const items = [
+    ["Tools", String(state.providerCapabilities.supports_tools)],
+    ["Streaming", String(state.providerCapabilities.supports_streaming)],
+    ["Usage reporting", String(state.providerCapabilities.supports_usage_reporting)],
+  ];
+  document.getElementById("provider-capabilities-grid").innerHTML = items
+    .map(
+      ([label, value]) => `
+        <article class="status-card">
+          <p class="meta-label">${escapeHtml(label)}</p>
+          <p>${escapeHtml(value)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
 async function refreshTools() {
   state.tools = await api("/console/api/tools");
   renderList(
@@ -229,7 +324,10 @@ async function refreshSessions() {
 }
 
 async function openSession(sessionId) {
-  const payload = await api(`/console/api/sessions/${encodeURIComponent(sessionId)}`);
+  const [payload, diagnostics] = await Promise.all([
+    api(`/console/api/sessions/${encodeURIComponent(sessionId)}`),
+    api(`/console/api/sessions/${encodeURIComponent(sessionId)}/events`),
+  ]);
   document.getElementById("session-detail-title").textContent = sessionId;
   renderList(
     document.getElementById("session-detail"),
@@ -242,6 +340,32 @@ async function openSession(sessionId) {
       </article>
     `,
     "This session has no turns."
+  );
+  renderSessionEvents(diagnostics.events || []);
+}
+
+function renderSessionEvents(events) {
+  const summary = document.getElementById("session-events-summary");
+  const counts = summarizeEventTypes(events);
+  summary.textContent = events.length
+    ? `${events.length} events | tools=${counts.tool} | policy=${counts.policy} | memory=${counts.memory}`
+    : "No events loaded";
+  renderList(
+    document.getElementById("session-events"),
+    events,
+    (event) => `
+      <article class="list-item">
+        <header>
+          <div>
+            <strong>${escapeHtml(event.event_type)}</strong>
+            <p>${escapeHtml(event.message)}</p>
+          </div>
+          <span class="badge">${escapeHtml(classifyEvent(event.event_type))}</span>
+        </header>
+        <p class="muted">${formatTime(event.created_at)}</p>
+      </article>
+    `,
+    "No session events yet."
   );
 }
 
@@ -265,6 +389,7 @@ async function refreshJobs() {
         <p class="muted">Last status: ${escapeHtml(job.last_status || "never run")}</p>
         <footer>
           <button type="button" data-run-job="${escapeHtml(job.job_id)}">Run Now</button>
+          <button type="button" data-open-job-runs="${escapeHtml(job.job_id)}">View Runs</button>
         </footer>
       </article>
     `,
@@ -273,6 +398,79 @@ async function refreshJobs() {
   container.querySelectorAll("button[data-run-job]").forEach((button) => {
     button.addEventListener("click", () => runJob(button.dataset.runJob));
   });
+  container.querySelectorAll("button[data-open-job-runs]").forEach((button) => {
+    button.addEventListener("click", () => refreshJobRuns(button.dataset.openJobRuns));
+  });
+}
+
+async function refreshJobRuns(jobId = null) {
+  const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
+  state.jobRuns = await api(`/console/api/job-runs${query}`);
+  document.getElementById("job-runs-title").textContent = jobId
+    ? `Runs for ${jobId}`
+    : "Latest job executions";
+  renderList(
+    document.getElementById("job-runs-list"),
+    state.jobRuns,
+    (run) => `
+      <article class="list-item">
+        <header>
+          <div>
+            <strong>${escapeHtml(run.job_id)}</strong>
+            <p>${escapeHtml(run.output_text || run.error_message || run.input_prompt)}</p>
+          </div>
+          <span class="badge">${escapeHtml(run.status)}</span>
+        </header>
+        <p class="muted">Trigger: ${escapeHtml(run.trigger)} | Started: ${formatTime(run.started_at)}</p>
+        <p class="muted">Completed: ${escapeHtml(formatTime(run.completed_at))}</p>
+        <footer>
+          <button type="button" data-open-run-id="${escapeHtml(run.run_id)}">Open Detail</button>
+        </footer>
+      </article>
+    `,
+    "No job runs yet."
+  );
+  document.querySelectorAll("button[data-open-run-id]").forEach((button) => {
+    button.addEventListener("click", () => openJobRun(button.dataset.openRunId));
+  });
+}
+
+async function openJobRun(runId) {
+  const payload = await api(`/console/api/job-runs/${encodeURIComponent(runId)}`);
+  document.getElementById("job-run-detail-title").textContent = `${payload.run.job_id} / ${payload.run.run_id}`;
+  const items = [
+    ["Status", payload.run.status],
+    ["Trigger", payload.run.trigger],
+    ["Session", payload.session_id],
+    ["Started", formatTime(payload.run.started_at)],
+    ["Completed", formatTime(payload.run.completed_at)],
+    ["Input", payload.run.input_prompt],
+    ["Output", payload.run.output_text || "none"],
+    ["Error", payload.run.error_message || "none"],
+  ];
+  const eventsHtml = (payload.events || [])
+    .map(
+      (event) => `
+        <article class="turn">
+          <strong>${escapeHtml(event.event_type)}</strong>
+          <p>${escapeHtml(event.message)}</p>
+          <p class="muted">${formatTime(event.created_at)}</p>
+        </article>
+      `
+    )
+    .join("");
+  document.getElementById("job-run-detail").classList.remove("empty");
+  document.getElementById("job-run-detail").innerHTML =
+    items
+      .map(
+        ([label, value]) => `
+          <article class="turn">
+            <strong>${escapeHtml(label)}</strong>
+            <p>${escapeHtml(value)}</p>
+          </article>
+        `
+      )
+      .join("") + (eventsHtml || '<article class="turn"><strong>Events</strong><p>No events recorded.</p></article>');
 }
 
 async function refreshLogs() {
@@ -373,7 +571,8 @@ async function saveConfig(event) {
       : "Configuration saved and applied."
   );
   await refreshConfig();
-  await refreshSystem();
+  await Promise.all([refreshSystem(), refreshRuntimeStatus()]);
+  await refreshProviderCapabilities();
 }
 
 async function testProvider() {
@@ -498,20 +697,20 @@ async function saveJob(event) {
   form.cron.value = "0 9 * * *";
   form.enabled.checked = true;
   clearSkillSelection("#job-skills");
-  await Promise.all([refreshJobs(), refreshLogs(), refreshSystem()]);
+  await Promise.all([refreshJobs(), refreshJobRuns(payload.job_id), refreshLogs(), refreshSystem()]);
 }
 
 async function runJob(jobId) {
   await api(`/console/api/jobs/${encodeURIComponent(jobId)}/run`, { method: "POST" });
   setStatus(`Job ${jobId} executed.`);
-  await Promise.all([refreshJobs(), refreshLogs()]);
+  await Promise.all([refreshJobs(), refreshJobRuns(jobId), refreshLogs()]);
 }
 
 async function controlScheduler(action) {
   const endpoint = action === "tick" ? "/scheduler/tick" : `/scheduler/${action}`;
   await api(endpoint, { method: "POST" });
   setStatus(`Scheduler ${action} completed.`);
-  await Promise.all([refreshJobs(), refreshLogs(), refreshSystem()]);
+  await Promise.all([refreshJobs(), refreshJobRuns(), refreshLogs(), refreshSystem()]);
 }
 
 async function createUser(event) {
@@ -639,6 +838,30 @@ function formatTime(value) {
   }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function summarizeEventTypes(events) {
+  return events.reduce(
+    (acc, event) => {
+      const category = classifyEvent(event.event_type);
+      acc[category] = (acc[category] || 0) + 1;
+      return acc;
+    },
+    { tool: 0, policy: 0, memory: 0, runtime: 0 }
+  );
+}
+
+function classifyEvent(eventType) {
+  if (eventType.startsWith("tool_")) {
+    return "tool";
+  }
+  if (eventType.startsWith("memory_")) {
+    return "memory";
+  }
+  if (eventType.includes("policy")) {
+    return "policy";
+  }
+  return "runtime";
 }
 
 function applyConfigPreset(event) {

@@ -7,6 +7,7 @@ from lightclaw.domain.errors import (
     AuthorizationError,
     JobDisabledError,
     JobNotFoundError,
+    JobRunNotFoundError,
     LightClawError,
     PolicyViolationError,
     ProviderRequestError,
@@ -99,6 +100,18 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=409,
             content=ErrorResponse(
                 error_code="job_disabled",
+                message=str(exc),
+            ).model_dump(),
+        )
+
+    @app.exception_handler(JobRunNotFoundError)
+    async def handle_job_run_not_found(
+        request: Request, exc: JobRunNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content=ErrorResponse(
+                error_code="job_run_not_found",
                 message=str(exc),
             ).model_dump(),
         )

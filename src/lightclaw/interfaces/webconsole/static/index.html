@@ -120,9 +120,23 @@
             <div class="full actions">
               <button type="submit" class="primary">Save Configuration</button>
               <button type="button" id="test-provider">Test Provider</button>
-              <p class="hint">Saving updates the local `.env`. Restart the API process to apply changes.</p>
+              <button type="button" id="reload-runtime-status">Refresh Runtime Status</button>
+              <button type="button" id="reload-runtime">Reload Runtime</button>
+              <p class="hint">Provider and policy changes are hot-applied when possible. Storage backend changes still require restart.</p>
             </div>
           </form>
+          <div class="card top-gap">
+            <div class="section-title">
+              <h4>Runtime Sync</h4>
+              <span id="runtime-sync-badge" class="badge">unknown</span>
+            </div>
+            <div id="runtime-status-grid" class="status-grid"></div>
+            <div class="section-title top-gap">
+              <h4>Provider Capabilities</h4>
+              <span id="provider-capability-badge" class="badge">unknown</span>
+            </div>
+            <div id="provider-capabilities-grid" class="status-grid"></div>
+          </div>
         </section>
 
         <section class="panel" data-panel="chat">
@@ -181,6 +195,11 @@
                 <span id="session-detail-title" class="muted">Select a session</span>
               </div>
               <div id="session-detail" class="transcript empty">No session selected.</div>
+              <div class="section-title top-gap">
+                <h4>Run Timeline</h4>
+                <span id="session-events-summary" class="muted">No events loaded</span>
+              </div>
+              <div id="session-events" class="list-stack empty">No session events yet.</div>
             </div>
           </div>
         </section>
@@ -248,6 +267,18 @@
                 <span id="scheduler-inline-status" class="muted"></span>
               </div>
               <div id="jobs-list" class="list-stack empty">No jobs configured.</div>
+            </div>
+            <div class="card">
+              <div class="section-title">
+                <h4>Run History</h4>
+                <span class="muted" id="job-runs-title">Latest job executions</span>
+              </div>
+              <div id="job-runs-list" class="list-stack empty">No job runs yet.</div>
+              <div class="section-title top-gap">
+                <h4>Run Detail</h4>
+                <span class="muted" id="job-run-detail-title">Select a run</span>
+              </div>
+              <div id="job-run-detail" class="transcript empty">No run selected.</div>
             </div>
           </div>
         </section>

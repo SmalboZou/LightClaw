@@ -213,6 +213,31 @@ def test_chat_service_extracts_memory_after_reply() -> None:
     assert context == ["[project_fact] prefers markdown output"]
 
 
+def test_chat_service_keeps_reply_when_memory_extraction_fails() -> None:
+    container = build_container(AppSettings(storage_backend="memory"))
+
+    async def failing_extract(**_kwargs):
+        raise RuntimeError("memory extraction failed")
+
+    container.memory_extraction_service.extract_and_remember = failing_extract
+    container.chat_service._memory_extraction_service = container.memory_extraction_service
+
+    response = asyncio.run(
+        container.chat_service.chat(
+            AgentRequest(
+                session_id="memory-failure-session",
+                user_id="extract-user",
+                message="hello despite extraction failure",
+                channel="test",
+            )
+        )
+    )
+    events = asyncio.run(container.execution_log_store.list_events("memory-failure-session"))
+
+    assert "hello despite extraction failure" in response.reply
+    assert any(event["event_type"] == "memory_extraction_failed" for event in events)
+
+
 def test_chat_service_extracts_session_scoped_memory() -> None:
     container = build_container(AppSettings(storage_backend="memory"))
 

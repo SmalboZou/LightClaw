@@ -2,17 +2,29 @@ import hashlib
 import hmac
 import json
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from sqlalchemy import delete, select
+from sqlalchemy.orm import sessionmaker
 
 from lightclaw.config.settings import AppSettings
 from lightclaw.domain.errors import AuthenticationError, AuthorizationError
+from lightclaw.infrastructure.persistence.models import ConsoleSessionRecord, ConsoleUserRecord
 
 
 class ConsoleAuthService:
-    def __init__(self, users_path: Path, settings: AppSettings) -> None:
+    SESSION_TTL = timedelta(days=7)
+
+    def __init__(
+        self,
+        users_path: Path,
+        settings: AppSettings,
+        session_factory: sessionmaker | None = None,
+    ) -> None:
         self._users_path = users_path
         self._settings = settings
+        self._session_factory = session_factory
         self._sessions: dict[str, dict[str, str]] = {}
         self._bootstrap_from_settings()
 
@@ -50,16 +62,48 @@ class ConsoleAuthService:
         if user is None or not self._verify_password(password, user["password_hash"]):
             raise AuthenticationError("Invalid username or password.")
         token = secrets.token_urlsafe(24)
-        self._sessions[token] = {"username": user["username"], "role": user["role"]}
+        if self._session_factory is not None:
+            expires_at = datetime.now(UTC) + self.SESSION_TTL
+            with self._session_factory() as session:
+                session.add(
+                    ConsoleSessionRecord(
+                        session_token=token,
+                        username=user["username"],
+                        role=user["role"],
+                        expires_at=expires_at,
+                    )
+                )
+                session.commit()
+        else:
+            self._sessions[token] = {"username": user["username"], "role": user["role"]}
         return token, {"username": user["username"], "role": user["role"]}
 
     def logout(self, token: str | None) -> None:
         if token:
-            self._sessions.pop(token, None)
+            if self._session_factory is not None:
+                with self._session_factory() as session:
+                    session.execute(
+                        delete(ConsoleSessionRecord).where(ConsoleSessionRecord.session_token == token)
+                    )
+                    session.commit()
+            else:
+                self._sessions.pop(token, None)
 
     def resolve_session(self, token: str | None) -> dict[str, str]:
         if not token:
             raise AuthenticationError("Login required.")
+        if self._session_factory is not None:
+            with self._session_factory() as session:
+                row = session.execute(
+                    select(ConsoleSessionRecord).where(ConsoleSessionRecord.session_token == token)
+                ).scalar_one_or_none()
+                expires_at = _coerce_utc_datetime(row.expires_at) if row is not None else None
+                if row is None or expires_at < datetime.now(UTC):
+                    if row is not None:
+                        session.delete(row)
+                        session.commit()
+                    raise AuthenticationError("Session expired. Please login again.")
+                return {"username": row.username, "role": row.role}
         session = self._sessions.get(token)
         if session is None:
             raise AuthenticationError("Session expired. Please login again.")
@@ -128,6 +172,20 @@ class ConsoleAuthService:
         return None
 
     def _load_users(self) -> list[dict[str, str]]:
+        if self._session_factory is not None:
+            with self._session_factory() as session:
+                rows = session.execute(
+                    select(ConsoleUserRecord).order_by(ConsoleUserRecord.id.asc())
+                ).scalars()
+                return [
+                    {
+                        "username": row.username,
+                        "role": row.role,
+                        "password_hash": row.password_hash,
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in rows
+                ]
         if not self._users_path.exists():
             return []
         payload = json.loads(self._users_path.read_text(encoding="utf-8"))
@@ -136,6 +194,20 @@ class ConsoleAuthService:
         return [item for item in payload if isinstance(item, dict)]
 
     def _save_users(self, users: list[dict[str, str]]) -> None:
+        if self._session_factory is not None:
+            with self._session_factory() as session:
+                session.execute(delete(ConsoleUserRecord))
+                for user in users:
+                    session.add(
+                        ConsoleUserRecord(
+                            username=user["username"],
+                            role=user["role"],
+                            password_hash=user["password_hash"],
+                            created_at=datetime.fromisoformat(user["created_at"]),
+                        )
+                    )
+                session.commit()
+            return
         self._users_path.parent.mkdir(parents=True, exist_ok=True)
         self._users_path.write_text(json.dumps(users, indent=2), encoding="utf-8")
 
@@ -153,3 +225,9 @@ class ConsoleAuthService:
     def _require_admin(self, actor: dict[str, str]) -> None:
         if actor.get("role") != "admin":
             raise AuthorizationError("Admin access is required for this action.")
+
+
+def _coerce_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
