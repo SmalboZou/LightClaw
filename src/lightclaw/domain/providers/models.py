@@ -8,6 +8,7 @@ class ProviderConfig(BaseModel):
     model: str | None = None
     base_url: str | None = None
     api_key: str | None = None
+    extra_headers: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_for_backend(self) -> "ProviderConfig":

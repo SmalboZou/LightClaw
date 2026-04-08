@@ -1,8 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
 from lightclaw.domain.agent.models import AgentTurn
 from lightclaw.domain.sessions.base import SessionStore
+from lightclaw.domain.sessions.models import SessionSummary
 from lightclaw.infrastructure.persistence.models import SessionMessageRecord
 
 
@@ -34,3 +35,33 @@ class SqlAlchemySessionStore(SessionStore):
                 )
             )
             session.commit()
+
+    async def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
+        with self._session_factory() as session:
+            session_ids = session.execute(
+                select(SessionMessageRecord.session_id)
+                .group_by(SessionMessageRecord.session_id)
+                .order_by(func.max(SessionMessageRecord.created_at).desc())
+                .limit(limit)
+            ).scalars()
+            summaries: list[SessionSummary] = []
+            for session_id in session_ids:
+                rows = session.execute(
+                    select(SessionMessageRecord)
+                    .where(SessionMessageRecord.session_id == session_id)
+                    .order_by(SessionMessageRecord.id.asc())
+                ).scalars()
+                turns = list(rows)
+                if not turns:
+                    continue
+                last_turn = turns[-1]
+                summaries.append(
+                    SessionSummary(
+                        session_id=session_id,
+                        turn_count=len(turns),
+                        last_role=last_turn.role,
+                        preview=last_turn.content[:120],
+                        updated_at=last_turn.created_at,
+                    )
+                )
+            return summaries

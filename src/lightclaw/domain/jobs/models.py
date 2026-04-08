@@ -18,3 +18,15 @@ class JobDefinition(BaseModel):
     last_output: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class JobRun(BaseModel):
+    run_id: str
+    job_id: str
+    trigger: str = "manual"
+    status: str
+    input_prompt: str
+    output_text: str | None = None
+    error_message: str | None = None
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None

@@ -9,6 +9,7 @@ from lightclaw.domain.agent.models import AgentRequest
 from lightclaw.domain.errors import LightClawError
 from lightclaw.infrastructure.persistence.database import create_session_factory, get_migration_status
 from lightclaw.interfaces.common import create_interface_context
+from lightclaw.config.settings import AppSettings
 
 cli = typer.Typer(add_completion=False, no_args_is_help=True)
 jobs_cli = typer.Typer(add_completion=False, help="Manage scheduled jobs.")
@@ -191,7 +192,7 @@ def skills_list() -> None:
 
 @db_cli.command("status")
 def db_status() -> None:
-    settings, _container = create_interface_context()
+    settings = AppSettings()
     status = get_migration_status(settings.database_url)
     typer.echo(f"database_url={settings.database_url}")
     typer.echo(f"current_version={status['current_version']}")
@@ -204,7 +205,7 @@ def db_status() -> None:
 
 @db_cli.command("migrate")
 def db_migrate() -> None:
-    settings, _container = create_interface_context()
+    settings = AppSettings()
     create_session_factory(settings.database_url)
     status = get_migration_status(settings.database_url)
     typer.echo(f"database_url={settings.database_url}")

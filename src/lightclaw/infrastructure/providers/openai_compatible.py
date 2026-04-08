@@ -48,21 +48,15 @@ class OpenAICompatibleProvider(ModelProvider):
         instructions: list[str],
         tool_registry: ToolRegistry,
     ) -> ProviderResponse:
+        tools = await self._build_tools(tool_registry)
         payload = {
             "model": self._config.model,
             "messages": self._build_messages(history, memories, instructions),
-            "tools": await self._build_tools(tool_registry),
-            "tool_choice": "auto",
         }
-        try:
-            response = await self._http_client.post(
-                "/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise ProviderRequestError(f"OpenAI-compatible request failed: {exc}") from exc
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        response = await self._post_with_tool_fallback(payload)
         return self._normalize_response(response.json())
 
     async def stream_next(
@@ -73,21 +67,18 @@ class OpenAICompatibleProvider(ModelProvider):
         instructions: list[str],
         tool_registry: ToolRegistry,
     ) -> AsyncIterator[ProviderStreamEvent]:
+        tools = await self._build_tools(tool_registry)
         payload = {
             "model": self._config.model,
             "messages": self._build_messages(history, memories, instructions),
-            "tools": await self._build_tools(tool_registry),
-            "tool_choice": "auto",
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         try:
-            async with self._http_client.stream(
-                "POST",
-                "/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            ) as response:
+            async with self._stream_with_tool_fallback(payload) as response:
                 response.raise_for_status()
                 usage: dict[str, int] = {}
                 async for line in response.aiter_lines():
@@ -109,14 +100,50 @@ class OpenAICompatibleProvider(ModelProvider):
                     if "usage" in chunk and isinstance(chunk["usage"], dict):
                         usage = self._normalize_usage(chunk["usage"])
         except httpx.HTTPError as exc:
-            raise ProviderRequestError(f"OpenAI-compatible streaming request failed: {exc}") from exc
+            raise ProviderRequestError(
+                _provider_error_message("OpenAI-compatible streaming", exc)
+            ) from exc
 
     async def aclose(self) -> None:
         if self._owns_client:
             await self._http_client.aclose()
 
+    async def _post_with_tool_fallback(self, payload: dict[str, Any]) -> httpx.Response:
+        try:
+            response = await self._http_client.post(
+                "/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            )
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as exc:
+            if _should_retry_without_tools(payload, exc.response):
+                fallback_payload = _without_tools(payload)
+                fallback_response = await self._http_client.post(
+                    "/chat/completions",
+                    headers=self._headers(),
+                    json=fallback_payload,
+                )
+                fallback_response.raise_for_status()
+                return fallback_response
+            raise ProviderRequestError(_provider_error_message("OpenAI-compatible", exc)) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderRequestError(_provider_error_message("OpenAI-compatible", exc)) from exc
+
+    def _stream_with_tool_fallback(
+        self,
+        payload: dict[str, Any],
+    ):
+        request_payload = payload
+        return _FallbackStreamContextManager(
+            self._http_client,
+            self._headers(),
+            request_payload,
+        )
+
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", **self._config.extra_headers}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
         return headers
@@ -171,6 +198,13 @@ class OpenAICompatibleProvider(ModelProvider):
         ]
 
     def _normalize_response(self, payload: dict[str, Any]) -> ProviderResponse:
+        if "error" in payload:
+            detail = payload.get("error")
+            if isinstance(detail, dict):
+                message = detail.get("message") or detail.get("code") or "Provider returned error"
+            else:
+                message = str(detail)
+            raise ProviderRequestError(f"OpenAI-compatible request failed: {message}")
         choice = payload["choices"][0]["message"]
         usage = payload.get("usage", {})
         tool_calls = choice.get("tool_calls") or []
@@ -205,3 +239,98 @@ class OpenAICompatibleProvider(ModelProvider):
         except json.JSONDecodeError:
             return {"raw": raw_arguments}
         return parsed if isinstance(parsed, dict) else {"value": parsed}
+
+
+def _provider_error_message(prefix: str, exc: httpx.HTTPError) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        detail = _extract_error_detail(exc.response)
+        return f"{prefix} request failed ({status}): {detail}"
+    return f"{prefix} request failed: {exc}"
+
+
+def _extract_error_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text or response.reason_phrase
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+            code = error.get("code")
+            if isinstance(code, str) and code.strip():
+                return code.strip()
+        message = payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return response.text or response.reason_phrase
+
+
+def _without_tools(payload: dict[str, Any]) -> dict[str, Any]:
+    fallback_payload = dict(payload)
+    fallback_payload.pop("tools", None)
+    fallback_payload.pop("tool_choice", None)
+    return fallback_payload
+
+
+def _should_retry_without_tools(payload: dict[str, Any], response: httpx.Response) -> bool:
+    if response.status_code != 400 or "tools" not in payload:
+        return False
+    detail = _extract_error_detail(response).lower()
+    tool_markers = (
+        "tool",
+        "function calling",
+        "tool_choice",
+        "tools are not supported",
+        "does not support tools",
+        "unsupported parameter",
+    )
+    return any(marker in detail for marker in tool_markers) or not detail
+
+
+class _FallbackStreamContextManager:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+    ) -> None:
+        self._client = client
+        self._headers = headers
+        self._payload = payload
+        self._context = None
+        self._response = None
+
+    async def __aenter__(self) -> httpx.Response:
+        self._context = self._client.stream(
+            "POST",
+            "/chat/completions",
+            headers=self._headers,
+            json=self._payload,
+        )
+        response = await self._context.__aenter__()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            await self._context.__aexit__(type(exc), exc, exc.__traceback__)
+            if not _should_retry_without_tools(self._payload, exc.response):
+                raise
+            fallback_payload = _without_tools(self._payload)
+            self._context = self._client.stream(
+                "POST",
+                "/chat/completions",
+                headers=self._headers,
+                json=fallback_payload,
+            )
+            response = await self._context.__aenter__()
+            response.raise_for_status()
+        self._response = response
+        return response
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._context is not None:
+            await self._context.__aexit__(exc_type, exc, tb)

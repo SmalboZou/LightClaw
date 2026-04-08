@@ -44,6 +44,25 @@ def test_migration_runner_upgrades_legacy_jobs_schema() -> None:
         shutil.rmtree(workspace, ignore_errors=True)
 
 
+def test_migration_status_reports_locked_database_with_clear_error() -> None:
+    workspace = _make_test_workspace()
+    db_path = workspace / "locked.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    lock_connection = sqlite3.connect(db_path)
+    try:
+        create_session_factory(database_url)
+        lock_connection.execute("BEGIN EXCLUSIVE")
+
+        try:
+            get_migration_status(database_url)
+            assert False, "expected RuntimeError for locked database"
+        except RuntimeError as exc:
+            assert "Database is locked" in str(exc)
+    finally:
+        lock_connection.close()
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
 def _create_legacy_schema(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as connection:

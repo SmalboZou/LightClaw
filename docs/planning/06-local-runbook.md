@@ -35,12 +35,24 @@ Expected result:
 ## 3. Run the API
 
 ```powershell
-./scripts/run-api.ps1
+./scripts/run-api.cmd
 ```
 
-Default local endpoint:
+This command runs Uvicorn in the foreground. The shell staying occupied is expected and does not mean the server is stuck.
 
-- `http://127.0.0.1:8000`
+Validated direct command:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn lightclaw.main:app --factory --host 127.0.0.1 --port 8000 --app-dir .\src
+```
+
+The API is ready only after Uvicorn prints `Uvicorn running on http://127.0.0.1:8000`.
+
+Default local endpoints:
+
+- `http://127.0.0.1:8000/health`
+- `http://127.0.0.1:8000/console`
+- `http://127.0.0.1:8000/docs`
 
 ## 4. Run the CLI
 
