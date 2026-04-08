@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, FastAPI, Header, HTTPException, Response
+from fastapi import APIRouter, Cookie, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -49,6 +49,12 @@ from lightclaw.interfaces.api.job_models import (
     JobTriggerResponse,
     SchedulerStatusResponse,
 )
+from lightclaw.interfaces.feishu.models import (
+    FeishuChallengeResponse,
+    FeishuWebhookAck,
+    FeishuWebhookPayload,
+)
+from lightclaw.interfaces.feishu.security import calculate_signature, decrypt_event
 from lightclaw.interfaces.api.models import ChatPayload, ChatResponse, HealthResponse, SkillResponse
 from lightclaw.interfaces.telegram.models import TelegramWebhookAck, TelegramWebhookPayload
 
@@ -520,6 +526,39 @@ def create_api(
             if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
                 raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret.")
         return await container.telegram_service.handle_webhook(payload)
+
+    @router.post("/feishu/webhook")
+    async def feishu_webhook(
+        request: Request,
+    ) -> FeishuWebhookAck | FeishuChallengeResponse:
+        raw_body = await request.body()
+        if settings.feishu_encrypt_key:
+            timestamp = request.headers.get("X-Lark-Request-Timestamp")
+            nonce = request.headers.get("X-Lark-Request-Nonce")
+            signature = request.headers.get("X-Lark-Signature")
+            if timestamp and nonce and signature:
+                expected = calculate_signature(
+                    timestamp=timestamp,
+                    nonce=nonce,
+                    encrypt_key=settings.feishu_encrypt_key,
+                    body=raw_body,
+                )
+                if signature != expected:
+                    raise HTTPException(status_code=403, detail="Invalid Feishu signature.")
+
+        payload = FeishuWebhookPayload.model_validate_json(raw_body)
+        if payload.encrypt and settings.feishu_encrypt_key:
+            decrypted = decrypt_event(payload.encrypt, settings.feishu_encrypt_key)
+            payload = FeishuWebhookPayload.model_validate_json(decrypted)
+
+        if settings.feishu_verification_token:
+            verification_token = None
+            if payload.header is not None:
+                verification_token = payload.header.get("token")
+            verification_token = verification_token or payload.token
+            if verification_token != settings.feishu_verification_token:
+                raise HTTPException(status_code=403, detail="Invalid Feishu verification token.")
+        return await container.feishu_service.handle_webhook(payload)
 
     @router.get("/jobs")
     async def list_jobs() -> list[JobResponse]:

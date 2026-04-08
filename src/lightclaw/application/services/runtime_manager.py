@@ -13,6 +13,8 @@ from lightclaw.domain.tools.models import ExecutionPolicy
 from lightclaw.infrastructure.providers.anthropic import AnthropicProvider
 from lightclaw.infrastructure.providers.mock import MockProvider
 from lightclaw.infrastructure.providers.openai_compatible import OpenAICompatibleProvider
+from lightclaw.interfaces.feishu.sender import FeishuSender
+from lightclaw.interfaces.feishu.service import FeishuService
 from lightclaw.interfaces.telegram.sender import TelegramSender
 from lightclaw.interfaces.telegram.service import TelegramService
 
@@ -25,6 +27,8 @@ class RuntimeServices:
     chat_service: ChatService
     telegram_sender: TelegramSender | None
     telegram_service: TelegramService
+    feishu_sender: FeishuSender | None
+    feishu_service: FeishuService
     job_service: JobService
     scheduler_service: SchedulerService
 
@@ -99,11 +103,21 @@ class RuntimeManager:
             chat_service=chat_service,
             sender=telegram_sender,
         )
+        feishu_sender = (
+            FeishuSender(settings.feishu_app_id, settings.feishu_app_secret)
+            if settings.feishu_app_id and settings.feishu_app_secret
+            else None
+        )
+        feishu_service = FeishuService(
+            chat_service=chat_service,
+            sender=feishu_sender,
+        )
         job_service = JobService(
             job_store=self._job_store,
             chat_service=chat_service,
             execution_log_store=self._execution_log_store,
             telegram_sender=telegram_sender,
+            feishu_sender=feishu_sender,
         )
         scheduler_service = SchedulerService(
             job_service=job_service,
@@ -117,6 +131,8 @@ class RuntimeManager:
             chat_service=chat_service,
             telegram_sender=telegram_sender,
             telegram_service=telegram_service,
+            feishu_sender=feishu_sender,
+            feishu_service=feishu_service,
             job_service=job_service,
             scheduler_service=scheduler_service,
         )

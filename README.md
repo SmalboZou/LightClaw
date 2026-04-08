@@ -12,6 +12,7 @@ This repository currently includes:
 - OpenAI-compatible, Anthropic, and mock providers
 - a schema-backed tool framework
 - Telegram integration
+- Feishu integration
 - structured memory and extraction flow
 - jobs and scheduler support
 - declarative skills
@@ -153,6 +154,60 @@ Run a tool:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run-cli.ps1 chat "/tool echo.text hello-tool"
+```
+
+## Feishu Setup
+
+LightClaw now supports Feishu event callbacks, signed requests, encrypted callbacks, and outbound message replies.
+
+Configure the following environment variables in `.env` or from the Web Console:
+
+```env
+LIGHTCLAW_FEISHU_APP_ID=cli_xxx
+LIGHTCLAW_FEISHU_APP_SECRET=xxx
+LIGHTCLAW_FEISHU_VERIFICATION_TOKEN=xxx
+LIGHTCLAW_FEISHU_ENCRYPT_KEY=xxx
+```
+
+Feishu webhook endpoint:
+
+```text
+POST /feishu/webhook
+```
+
+For a local API running on port `8000`, the full callback URL looks like:
+
+```text
+http://127.0.0.1:8000/feishu/webhook
+```
+
+In the Feishu developer console:
+
+1. create or open a custom app
+2. enable the bot capability
+3. subscribe to the `im.message.receive_v1` event
+4. set the request URL to your LightClaw `/feishu/webhook` endpoint
+5. copy the App ID, App Secret, Verification Token, and Encrypt Key into LightClaw
+6. grant the message event and message send permissions required by your bot
+7. publish the app version inside your tenant and add the bot to the target chat
+
+Current Feishu support in LightClaw includes:
+
+- text message event intake
+- URL verification handling
+- verification token validation
+- request signature validation
+- encrypted callback decryption
+- replying back to Feishu chats
+- sending scheduled job output to Feishu when `target_channel=feishu`
+
+For scheduled jobs, `target_destination` can be either a plain chat ID or an explicit prefixed target such as:
+
+```text
+chat_id:oc_xxx
+open_id:ou_xxx
+user_id:xxxx
+email:user@example.com
 ```
 
 ## Database Commands

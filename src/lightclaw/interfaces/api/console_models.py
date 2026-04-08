@@ -17,6 +17,13 @@ class ConsoleConfigResponse(BaseModel):
     tool_policy: str
     allow_process_exec: bool
     allow_network_access: bool
+    feishu_app_id: str | None = None
+    feishu_app_secret_masked: str | None = None
+    has_feishu_app_secret: bool = False
+    feishu_verification_token_masked: str | None = None
+    has_feishu_verification_token: bool = False
+    feishu_encrypt_key_masked: str | None = None
+    has_feishu_encrypt_key: bool = False
     workspace_root: str
     skills_root: str
     mcp_servers_root: str
@@ -34,6 +41,10 @@ class ConsoleConfigUpdatePayload(BaseModel):
     tool_policy: str = "workspace_write"
     allow_process_exec: bool = False
     allow_network_access: bool = False
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    feishu_verification_token: str | None = None
+    feishu_encrypt_key: str | None = None
     console_admin_username: str | None = None
     console_admin_password: str | None = None
 
@@ -147,6 +158,10 @@ class ConsoleBootstrapPayload(BaseModel):
     tool_policy: str = "workspace_write"
     allow_process_exec: bool = False
     allow_network_access: bool = False
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    feishu_verification_token: str | None = None
+    feishu_encrypt_key: str | None = None
 
 
 class ConsoleAuthPayload(BaseModel):

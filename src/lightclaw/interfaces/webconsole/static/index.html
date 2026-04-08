@@ -103,6 +103,25 @@
               <input name="allow_network_access" type="checkbox" />
               <span>Allow network access</span>
             </label>
+            <label>
+              <span>Feishu App ID</span>
+              <input name="feishu_app_id" placeholder="cli_xxx" />
+            </label>
+            <label>
+              <span>Feishu App Secret</span>
+              <input name="feishu_app_secret" type="password" placeholder="Paste to replace current value" />
+              <small id="feishu-app-secret-hint"></small>
+            </label>
+            <label>
+              <span>Feishu Verification Token</span>
+              <input name="feishu_verification_token" type="password" placeholder="Optional but recommended" />
+              <small id="feishu-verification-token-hint"></small>
+            </label>
+            <label>
+              <span>Feishu Encrypt Key</span>
+              <input name="feishu_encrypt_key" type="password" placeholder="Required for encrypted callbacks" />
+              <small id="feishu-encrypt-key-hint"></small>
+            </label>
             <div class="full key-value-grid">
               <div>
                 <p class="meta-label">Workspace root</p>
@@ -397,6 +416,22 @@
           <label class="full">
             <span>API key</span>
             <input name="provider_api_key" type="password" />
+          </label>
+          <label>
+            <span>Feishu App ID</span>
+            <input name="feishu_app_id" placeholder="cli_xxx" />
+          </label>
+          <label>
+            <span>Feishu App Secret</span>
+            <input name="feishu_app_secret" type="password" />
+          </label>
+          <label>
+            <span>Feishu Verification Token</span>
+            <input name="feishu_verification_token" type="password" />
+          </label>
+          <label>
+            <span>Feishu Encrypt Key</span>
+            <input name="feishu_encrypt_key" type="password" />
           </label>
           <label class="full">
             <span>Extra headers JSON</span>

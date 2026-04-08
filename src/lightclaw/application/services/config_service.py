@@ -21,11 +21,21 @@ class ConfigService:
         "LIGHTCLAW_TOOL_POLICY",
         "LIGHTCLAW_ALLOW_PROCESS_EXEC",
         "LIGHTCLAW_ALLOW_NETWORK_ACCESS",
+        "LIGHTCLAW_FEISHU_APP_ID",
+        "LIGHTCLAW_FEISHU_APP_SECRET",
+        "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN",
+        "LIGHTCLAW_FEISHU_ENCRYPT_KEY",
         "LIGHTCLAW_CONSOLE_ADMIN_USERNAME",
         "LIGHTCLAW_CONSOLE_ADMIN_PASSWORD",
     ]
 
-    SECRET_KEYS = {"LIGHTCLAW_PROVIDER_API_KEY", "LIGHTCLAW_CONSOLE_ADMIN_PASSWORD"}
+    SECRET_KEYS = {
+        "LIGHTCLAW_PROVIDER_API_KEY",
+        "LIGHTCLAW_FEISHU_APP_SECRET",
+        "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN",
+        "LIGHTCLAW_FEISHU_ENCRYPT_KEY",
+        "LIGHTCLAW_CONSOLE_ADMIN_PASSWORD",
+    }
     SETTINGS_KEY_MAP = {
         "LIGHTCLAW_PROVIDER_BACKEND": "provider_backend",
         "LIGHTCLAW_PROVIDER_MODEL": "provider_model",
@@ -35,6 +45,10 @@ class ConfigService:
         "LIGHTCLAW_TOOL_POLICY": "tool_policy",
         "LIGHTCLAW_ALLOW_PROCESS_EXEC": "allow_process_exec",
         "LIGHTCLAW_ALLOW_NETWORK_ACCESS": "allow_network_access",
+        "LIGHTCLAW_FEISHU_APP_ID": "feishu_app_id",
+        "LIGHTCLAW_FEISHU_APP_SECRET": "feishu_app_secret",
+        "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN": "feishu_verification_token",
+        "LIGHTCLAW_FEISHU_ENCRYPT_KEY": "feishu_encrypt_key",
         "LIGHTCLAW_CONSOLE_ADMIN_USERNAME": "console_admin_username",
         "LIGHTCLAW_CONSOLE_ADMIN_PASSWORD": "console_admin_password",
     }
@@ -66,6 +80,13 @@ class ConfigService:
             "tool_policy": self._settings.tool_policy,
             "allow_process_exec": self._settings.allow_process_exec,
             "allow_network_access": self._settings.allow_network_access,
+            "feishu_app_id": self._settings.feishu_app_id,
+            "feishu_app_secret_masked": _mask_secret(self._settings.feishu_app_secret),
+            "has_feishu_app_secret": bool(self._settings.feishu_app_secret),
+            "feishu_verification_token_masked": _mask_secret(self._settings.feishu_verification_token),
+            "has_feishu_verification_token": bool(self._settings.feishu_verification_token),
+            "feishu_encrypt_key_masked": _mask_secret(self._settings.feishu_encrypt_key),
+            "has_feishu_encrypt_key": bool(self._settings.feishu_encrypt_key),
             "workspace_root": str(self._settings.workspace_root),
             "skills_root": str(self._settings.skills_root),
             "mcp_servers_root": str(self._settings.mcp_servers_root),
@@ -112,6 +133,10 @@ class ConfigService:
         provider_api_key = str(payload.get("provider_api_key") or "").strip()
         provider_extra_headers_json = str(payload.get("provider_extra_headers_json") or "").strip()
         provider_extra_headers = _normalize_headers_json(provider_extra_headers_json)
+        feishu_app_id = _normalize_optional_text(payload.get("feishu_app_id")) or ""
+        feishu_app_secret = str(payload.get("feishu_app_secret") or "").strip()
+        feishu_verification_token = str(payload.get("feishu_verification_token") or "").strip()
+        feishu_encrypt_key = str(payload.get("feishu_encrypt_key") or "").strip()
         next_storage_backend = str(payload.get("storage_backend") or "sqlite")
         updates = {
             "LIGHTCLAW_PROVIDER_BACKEND": str(payload.get("provider_backend") or "mock"),
@@ -127,6 +152,12 @@ class ConfigService:
             "LIGHTCLAW_ALLOW_NETWORK_ACCESS": str(
                 bool(payload.get("allow_network_access", False))
             ).lower(),
+            "LIGHTCLAW_FEISHU_APP_ID": feishu_app_id,
+            "LIGHTCLAW_FEISHU_APP_SECRET": feishu_app_secret or str(self._settings.feishu_app_secret or ""),
+            "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN": feishu_verification_token
+            or str(self._settings.feishu_verification_token or ""),
+            "LIGHTCLAW_FEISHU_ENCRYPT_KEY": feishu_encrypt_key
+            or str(self._settings.feishu_encrypt_key or ""),
             "LIGHTCLAW_CONSOLE_ADMIN_USERNAME": str(
                 payload.get("console_admin_username") or self._settings.console_admin_username or ""
             ),
@@ -304,6 +335,10 @@ def hydrate_settings_from_runtime_config(settings: AppSettings) -> AppSettings:
         "scheduler_poll_seconds": settings.scheduler_poll_seconds,
         "telegram_bot_token": settings.telegram_bot_token,
         "telegram_webhook_secret": settings.telegram_webhook_secret,
+        "feishu_app_id": settings.feishu_app_id,
+        "feishu_app_secret": settings.feishu_app_secret,
+        "feishu_verification_token": settings.feishu_verification_token,
+        "feishu_encrypt_key": settings.feishu_encrypt_key,
         "console_secret_key": settings.console_secret_key,
     }
     for env_key, setting_key in ConfigService.SETTINGS_KEY_MAP.items():
@@ -312,7 +347,16 @@ def hydrate_settings_from_runtime_config(settings: AppSettings) -> AppSettings:
         raw_value = values[env_key]
         if setting_key in {"allow_process_exec", "allow_network_access"}:
             overrides[setting_key] = raw_value.lower() == "true"
-        elif setting_key in {"provider_base_url", "provider_api_key", "console_admin_username", "console_admin_password"}:
+        elif setting_key in {
+            "provider_base_url",
+            "provider_api_key",
+            "feishu_app_id",
+            "feishu_app_secret",
+            "feishu_verification_token",
+            "feishu_encrypt_key",
+            "console_admin_username",
+            "console_admin_password",
+        }:
             overrides[setting_key] = _normalize_optional_text(raw_value)
         else:
             overrides[setting_key] = raw_value

@@ -4,12 +4,14 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 from lightclaw.bootstrap import build_container
 from lightclaw.config.settings import AppSettings
 from lightclaw.domain.jobs.models import JobDefinition
 from lightclaw.interfaces.api.app import create_api
+from lightclaw.interfaces.feishu.sender import FeishuSender
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,6 +28,7 @@ def test_job_service_runs_persisted_job() -> None:
         storage_backend="sqlite",
         database_url=f"sqlite:///{(workspace / 'lightclaw.db').as_posix()}",
         workspace_root=workspace,
+        provider_backend="mock",
     )
 
     try:
@@ -63,6 +66,7 @@ def test_job_service_passes_skills_to_chat_execution() -> None:
         storage_backend="memory",
         workspace_root=workspace,
         skills_root=ROOT / "skills",
+        provider_backend="mock",
     )
     try:
         container = build_container(settings)
@@ -87,9 +91,71 @@ def test_job_service_passes_skills_to_chat_execution() -> None:
         shutil.rmtree(workspace, ignore_errors=True)
 
 
+def test_job_service_sends_result_to_feishu_target() -> None:
+    workspace = _make_test_workspace()
+    settings = AppSettings(storage_backend="memory", workspace_root=workspace, provider_backend="mock")
+
+    async def _run() -> None:
+        sent_payloads: list[tuple[str, str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/tenant_access_token/internal"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "code": 0,
+                        "tenant_access_token": "tenant-token",
+                        "expire": 7200,
+                    },
+                )
+            sent_payloads.append(
+                (
+                    request.url.params["receive_id_type"],
+                    request.content.decode("utf-8"),
+                    request.headers["Authorization"],
+                )
+            )
+            return httpx.Response(
+                200,
+                json={"code": 0, "data": {"message_id": "om_job_out"}},
+            )
+
+        container = build_container(settings)
+        container.job_service._feishu_sender = FeishuSender(
+            app_id="cli_aid",
+            app_secret="secret",
+            http_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(handler),
+                base_url="https://open.feishu.cn",
+            ),
+        )
+        await container.job_service.upsert_job(
+            JobDefinition(
+                job_id="feishu-job",
+                name="Feishu Job",
+                cron="* * * * *",
+                input_prompt="hello feishu job",
+                target_channel="feishu",
+                target_destination="chat_id:oc_target",
+            )
+        )
+
+        result = await container.job_service.run_job("feishu-job")
+
+        assert result.last_status == "completed"
+        assert len(sent_payloads) == 1
+        assert sent_payloads[0][0] == "chat_id"
+        assert sent_payloads[0][2] == "Bearer tenant-token"
+
+    try:
+        asyncio.run(_run())
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
 def test_scheduler_runs_due_jobs() -> None:
     workspace = _make_test_workspace()
-    settings = AppSettings(storage_backend="memory", workspace_root=workspace)
+    settings = AppSettings(storage_backend="memory", workspace_root=workspace, provider_backend="mock")
     try:
         container = build_container(settings)
         asyncio.run(
@@ -116,7 +182,7 @@ def test_scheduler_runs_due_jobs() -> None:
 
 def test_scheduler_tick_deduplicates_same_minute() -> None:
     workspace = _make_test_workspace()
-    settings = AppSettings(storage_backend="memory", workspace_root=workspace)
+    settings = AppSettings(storage_backend="memory", workspace_root=workspace, provider_backend="mock")
     try:
         container = build_container(settings)
         asyncio.run(
@@ -180,6 +246,7 @@ def test_jobs_api_create_list_and_run() -> None:
         storage_backend="memory",
         workspace_root=workspace,
         skills_root=ROOT / "skills",
+        provider_backend="mock",
     )
     try:
         container = build_container(settings)

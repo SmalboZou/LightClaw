@@ -50,6 +50,10 @@ class AppSettings(BaseModel):
     scheduler_poll_seconds: int = 30
     telegram_bot_token: str | None = None
     telegram_webhook_secret: str | None = None
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    feishu_verification_token: str | None = None
+    feishu_encrypt_key: str | None = None
     console_admin_username: str | None = None
     console_admin_password: str | None = None
     console_secret_key: str = "lightclaw-dev-secret"
@@ -105,6 +109,12 @@ class AppSettings(BaseModel):
             "scheduler_poll_seconds": int(_value("LIGHTCLAW_SCHEDULER_POLL_SECONDS", "30") or "30"),
             "telegram_bot_token": _optional_text(_value("LIGHTCLAW_TELEGRAM_BOT_TOKEN")),
             "telegram_webhook_secret": _optional_text(_value("LIGHTCLAW_TELEGRAM_WEBHOOK_SECRET")),
+            "feishu_app_id": _optional_text(_value("LIGHTCLAW_FEISHU_APP_ID")),
+            "feishu_app_secret": _optional_text(_value("LIGHTCLAW_FEISHU_APP_SECRET")),
+            "feishu_verification_token": _optional_text(
+                _value("LIGHTCLAW_FEISHU_VERIFICATION_TOKEN")
+            ),
+            "feishu_encrypt_key": _optional_text(_value("LIGHTCLAW_FEISHU_ENCRYPT_KEY")),
             "console_admin_username": _optional_text(_value("LIGHTCLAW_CONSOLE_ADMIN_USERNAME")),
             "console_admin_password": _optional_text(_value("LIGHTCLAW_CONSOLE_ADMIN_PASSWORD")),
             "console_secret_key": _value(

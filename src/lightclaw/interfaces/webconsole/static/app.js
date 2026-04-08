@@ -114,6 +114,10 @@ async function bootstrapConsole(event) {
     provider_base_url: form.provider_base_url.value.trim() || null,
     provider_extra_headers_json: form.provider_extra_headers_json.value.trim(),
     provider_api_key: form.provider_api_key.value.trim() || null,
+    feishu_app_id: form.feishu_app_id.value.trim() || null,
+    feishu_app_secret: form.feishu_app_secret.value.trim() || null,
+    feishu_verification_token: form.feishu_verification_token.value.trim() || null,
+    feishu_encrypt_key: form.feishu_encrypt_key.value.trim() || null,
     storage_backend: "sqlite",
     tool_policy: "workspace_write",
     allow_process_exec: false,
@@ -160,9 +164,22 @@ async function refreshConfig() {
   form.tool_policy.value = state.config.tool_policy;
   form.allow_process_exec.checked = state.config.allow_process_exec;
   form.allow_network_access.checked = state.config.allow_network_access;
+  form.feishu_app_id.value = state.config.feishu_app_id || "";
+  form.feishu_app_secret.value = "";
+  form.feishu_verification_token.value = "";
+  form.feishu_encrypt_key.value = "";
   document.getElementById("api-key-hint").textContent = state.config.has_provider_api_key
     ? `Current key: ${state.config.provider_api_key_masked}`
     : "No provider key stored.";
+  document.getElementById("feishu-app-secret-hint").textContent = state.config.has_feishu_app_secret
+    ? `Current secret: ${state.config.feishu_app_secret_masked}`
+    : "No Feishu app secret stored.";
+  document.getElementById("feishu-verification-token-hint").textContent = state.config.has_feishu_verification_token
+    ? `Current token: ${state.config.feishu_verification_token_masked}`
+    : "No Feishu verification token stored.";
+  document.getElementById("feishu-encrypt-key-hint").textContent = state.config.has_feishu_encrypt_key
+    ? `Current key: ${state.config.feishu_encrypt_key_masked}`
+    : "No Feishu encrypt key stored.";
   document.getElementById("workspace-root").textContent = state.config.workspace_root;
   document.getElementById("skills-root").textContent = state.config.skills_root;
   document.getElementById("mcp-root").textContent = state.config.mcp_servers_root;
@@ -560,6 +577,10 @@ async function saveConfig(event) {
     tool_policy: form.tool_policy.value,
     allow_process_exec: form.allow_process_exec.checked,
     allow_network_access: form.allow_network_access.checked,
+    feishu_app_id: form.feishu_app_id.value,
+    feishu_app_secret: form.feishu_app_secret.value,
+    feishu_verification_token: form.feishu_verification_token.value,
+    feishu_encrypt_key: form.feishu_encrypt_key.value,
   };
   const result = await api("/console/api/config", {
     method: "POST",

@@ -6,6 +6,7 @@ from lightclaw.domain.errors import JobDisabledError, JobNotFoundError, JobRunNo
 from lightclaw.domain.jobs.base import JobStore
 from lightclaw.domain.jobs.models import JobDefinition, JobRun
 from lightclaw.domain.logs.base import ExecutionLogStore
+from lightclaw.interfaces.feishu.sender import FeishuSender
 from lightclaw.interfaces.telegram.sender import TelegramSender
 
 
@@ -16,11 +17,13 @@ class JobService:
         chat_service: ChatService,
         execution_log_store: ExecutionLogStore,
         telegram_sender: TelegramSender | None = None,
+        feishu_sender: FeishuSender | None = None,
     ) -> None:
         self._job_store = job_store
         self._chat_service = chat_service
         self._execution_log_store = execution_log_store
         self._telegram_sender = telegram_sender
+        self._feishu_sender = feishu_sender
 
     async def upsert_job(self, job: JobDefinition) -> None:
         await self._job_store.upsert_job(job)
@@ -90,6 +93,17 @@ class JobService:
                     chat_id=job.target_destination,
                     text=response.reply,
                 )
+            if (
+                job.target_channel == "feishu"
+                and job.target_destination
+                and self._feishu_sender is not None
+            ):
+                receive_id_type, receive_id = _parse_feishu_destination(job.target_destination)
+                await self._feishu_sender.send_message(
+                    receive_id=receive_id,
+                    text=response.reply,
+                    receive_id_type=receive_id_type,
+                )
 
             job.last_status = "completed"
             job.last_run_at = datetime.now(UTC)
@@ -122,3 +136,13 @@ class JobService:
                 run_id=run.run_id,
             )
             raise
+
+
+def _parse_feishu_destination(destination: str) -> tuple[str, str]:
+    normalized = destination.strip()
+    if ":" not in normalized:
+        return "chat_id", normalized
+    receive_id_type, receive_id = normalized.split(":", 1)
+    if receive_id_type in {"chat_id", "open_id", "union_id", "user_id", "email"} and receive_id:
+        return receive_id_type, receive_id
+    return "chat_id", normalized

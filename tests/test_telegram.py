@@ -34,7 +34,7 @@ def test_telegram_adapter_normalizes_text_message() -> None:
 
 
 def test_telegram_webhook_processes_message_and_returns_ack() -> None:
-    settings = AppSettings(storage_backend="memory")
+    settings = AppSettings(storage_backend="memory", provider_backend="mock")
     container = build_container(settings)
     client = TestClient(create_api(settings, container=container))
 
@@ -62,6 +62,7 @@ def test_telegram_webhook_processes_message_and_returns_ack() -> None:
 def test_telegram_webhook_rejects_invalid_secret() -> None:
     settings = AppSettings(
         storage_backend="memory",
+        provider_backend="mock",
         telegram_webhook_secret="expected-secret",
     )
     container = build_container(settings)

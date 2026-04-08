@@ -95,6 +95,8 @@ class ApplicationContainer:
         self.chat_service = services.chat_service
         self.telegram_sender = services.telegram_sender
         self.telegram_service = services.telegram_service
+        self.feishu_sender = services.feishu_sender
+        self.feishu_service = services.feishu_service
         self.job_service = services.job_service
         self.scheduler_service = services.scheduler_service
 
