@@ -42,6 +42,14 @@ class AppSettings(BaseModel):
     allow_process_exec: bool = False
     allow_network_access: bool = False
     allowed_commands: list[str] = []
+    browser_enabled: bool = False
+    browser_backend: Literal["mock", "playwright"] = "mock"
+    browser_headless: bool = True
+    browser_allowed_domains: list[str] = []
+    browser_allow_persistent_auth: bool = False
+    browser_profile_root: Path | None = None
+    mail_web_provider: Literal["gmail"] = "gmail"
+    weather_url_template: str = "https://wttr.in/{location}"
     workspace_root: Path = Path(".").resolve()
     max_agent_loops: int = 4
     provider_timeout_seconds: float = 15.0
@@ -96,6 +104,26 @@ class AppSettings(BaseModel):
                 for item in (_value("LIGHTCLAW_ALLOWED_COMMANDS", "") or "").split(",")
                 if item.strip()
             ],
+            "browser_enabled": (_value("LIGHTCLAW_BROWSER_ENABLED", "false") or "false").lower()
+            == "true",
+            "browser_backend": _value("LIGHTCLAW_BROWSER_BACKEND", "mock"),
+            "browser_headless": (_value("LIGHTCLAW_BROWSER_HEADLESS", "true") or "true").lower()
+            == "true",
+            "browser_allowed_domains": [
+                item.strip().lower()
+                for item in (_value("LIGHTCLAW_BROWSER_ALLOWED_DOMAINS", "") or "").split(",")
+                if item.strip()
+            ],
+            "browser_allow_persistent_auth": (
+                _value("LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH", "false") or "false"
+            ).lower()
+            == "true",
+            "browser_profile_root": _optional_text(_value("LIGHTCLAW_BROWSER_PROFILE_ROOT")),
+            "mail_web_provider": _value("LIGHTCLAW_MAIL_WEB_PROVIDER", "gmail"),
+            "weather_url_template": _value(
+                "LIGHTCLAW_WEATHER_URL_TEMPLATE",
+                "https://wttr.in/{location}",
+            ),
             "workspace_root": Path(
                 _value("LIGHTCLAW_WORKSPACE_ROOT", str(Path(".").resolve()))
             ).resolve(),
@@ -134,6 +162,10 @@ class AppSettings(BaseModel):
             self.skills_root = (self.workspace_root / "skills").resolve()
         else:
             self.skills_root = Path(self.skills_root).resolve()
+        if self.browser_profile_root is None:
+            self.browser_profile_root = (self.workspace_root / ".lightclaw" / "browser").resolve()
+        else:
+            self.browser_profile_root = Path(self.browser_profile_root).resolve()
         if self.mcp_servers_root is None:
             self.mcp_servers_root = (self.workspace_root / "mcp" / "servers").resolve()
         else:

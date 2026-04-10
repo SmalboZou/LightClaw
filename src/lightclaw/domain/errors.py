@@ -48,3 +48,11 @@ class AuthenticationError(LightClawError):
 
 class AuthorizationError(LightClawError):
     """Raised when a console user attempts to access another user's resources."""
+
+
+class BrowserAutomationError(LightClawError):
+    """Raised when browser automation cannot complete a requested action."""
+
+
+class BrowserSessionNotFoundError(BrowserAutomationError):
+    """Raised when a requested browser session does not exist."""

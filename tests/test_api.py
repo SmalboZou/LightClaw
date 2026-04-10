@@ -186,6 +186,14 @@ def test_console_config_can_be_read_and_saved() -> None:
             "tool_policy": "workspace_write",
             "allow_process_exec": False,
             "allow_network_access": False,
+            "browser_enabled": True,
+            "browser_backend": "mock",
+            "browser_headless": True,
+            "browser_allowed_domains": ["wttr.in", "mail.google.com"],
+            "browser_allow_persistent_auth": True,
+            "browser_profile_root": str((workspace / ".profiles" / "browser").resolve()),
+            "mail_web_provider": "gmail",
+            "weather_url_template": "https://wttr.in/{location}",
         },
     )
 
@@ -193,6 +201,10 @@ def test_console_config_can_be_read_and_saved() -> None:
     assert read_response.json()["provider_backend"] == "mock"
     assert save_response.status_code == 200
     assert save_response.json()["requires_restart"] is False
+    saved_payload = client.get("/console/api/config").json()
+    assert saved_payload["browser_enabled"] is True
+    assert saved_payload["browser_allowed_domains"] == ["wttr.in", "mail.google.com"]
+    assert saved_payload["browser_allow_persistent_auth"] is True
     env_text = env_path.read_text(encoding="utf-8")
     assert "LIGHTCLAW_PROVIDER_BACKEND=openai_compatible" in env_text
     assert "LIGHTCLAW_PROVIDER_API_KEY=sk-test-12345678" in env_text
@@ -200,6 +212,8 @@ def test_console_config_can_be_read_and_saved() -> None:
         "LIGHTCLAW_PROVIDER_EXTRA_HEADERS_JSON={\"HTTP-Referer\": \"https://your-app.example\"}"
         in env_text
     )
+    assert "LIGHTCLAW_BROWSER_ENABLED=true" in env_text
+    assert "LIGHTCLAW_BROWSER_ALLOWED_DOMAINS=wttr.in,mail.google.com" in env_text
 
 
 def test_console_config_hot_applies_runtime_changes_without_restart() -> None:
@@ -399,6 +413,14 @@ def test_console_runtime_status_reflects_active_and_desired_config() -> None:
             "tool_policy": "workspace_write",
             "allow_process_exec": False,
             "allow_network_access": False,
+            "browser_enabled": True,
+            "browser_backend": "mock",
+            "browser_headless": False,
+            "browser_allowed_domains": ["wttr.in"],
+            "browser_allow_persistent_auth": False,
+            "browser_profile_root": str((workspace / ".lightclaw" / "browser").resolve()),
+            "mail_web_provider": "gmail",
+            "weather_url_template": "https://wttr.in/{location}",
         },
     )
     runtime_response = client.get("/console/api/runtime/status")
@@ -408,6 +430,9 @@ def test_console_runtime_status_reflects_active_and_desired_config() -> None:
     payload = runtime_response.json()
     assert payload["desired_matches_active"] is True
     assert payload["active"]["provider_model"] == "runtime-status-model"
+    assert payload["active"]["browser_enabled"] is True
+    assert payload["active"]["browser_headless"] is False
+    assert payload["desired"]["browser_allowed_domains"] == ["wttr.in"]
     assert payload["last_reload_reason"] == "hot_reload"
     assert payload["last_applied_at"]
 

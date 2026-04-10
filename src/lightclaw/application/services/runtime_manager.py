@@ -80,6 +80,14 @@ class RuntimeManager:
             allow_process_exec=settings.allow_process_exec,
             allow_network_access=settings.allow_network_access,
             allowed_commands=settings.allowed_commands,
+            browser_enabled=settings.browser_enabled,
+            browser_backend=settings.browser_backend,
+            browser_headless=settings.browser_headless,
+            browser_allowed_domains=settings.browser_allowed_domains,
+            browser_allow_persistent_auth=settings.browser_allow_persistent_auth,
+            browser_profile_root=settings.browser_profile_root,
+            mail_web_provider=settings.mail_web_provider,
+            weather_url_template=settings.weather_url_template,
         )
         chat_service = ChatService(
             provider=provider,

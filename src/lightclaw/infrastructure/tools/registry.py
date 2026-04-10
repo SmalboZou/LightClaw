@@ -8,6 +8,18 @@ from lightclaw.domain.agent.models import ToolResult
 from lightclaw.domain.errors import PolicyViolationError
 from lightclaw.domain.tools.base import Tool, ToolRegistry
 from lightclaw.domain.tools.models import ToolExecutionContext
+from lightclaw.infrastructure.tools.browser_tools import (
+    BrowserClickTool,
+    BrowserCloseTool,
+    BrowserExtractTool,
+    BrowserNavigateTool,
+    BrowserOpenTool,
+    BrowserSnapshotTool,
+    BrowserTypeTool,
+    BrowserWaitTool,
+    MailSendWebTool,
+    WeatherLookupWebTool,
+)
 
 
 def _resolve_workspace_path(workspace_root: Path, raw_path: str) -> Path:
@@ -168,7 +180,7 @@ class HttpFetchTool(Tool):
 
 
 class InMemoryToolRegistry(ToolRegistry):
-    def __init__(self, tools: list[Tool] | None = None) -> None:
+    def __init__(self, tools: list[Tool] | None = None, browser_service: Any | None = None) -> None:
         resolved_tools = tools or [
             EchoTool(),
             SessionCountTurnsTool(),
@@ -176,6 +188,16 @@ class InMemoryToolRegistry(ToolRegistry):
             FilesystemWriteTool(),
             ShellExecTool(),
             HttpFetchTool(),
+            BrowserOpenTool(browser_service),
+            BrowserNavigateTool(browser_service),
+            BrowserSnapshotTool(browser_service),
+            BrowserClickTool(browser_service),
+            BrowserTypeTool(browser_service),
+            BrowserWaitTool(browser_service),
+            BrowserExtractTool(browser_service),
+            BrowserCloseTool(browser_service),
+            WeatherLookupWebTool(browser_service),
+            MailSendWebTool(browser_service),
         ]
         self._tools = {tool.name: tool for tool in resolved_tools}
 

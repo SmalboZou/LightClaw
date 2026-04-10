@@ -210,6 +210,49 @@ user_id:xxxx
 email:user@example.com
 ```
 
+## Browser Automation Setup
+
+LightClaw now includes a Playwright-backed browser automation backend in addition to the default mock backend.
+
+Enable it in `.env`:
+
+```env
+LIGHTCLAW_BROWSER_ENABLED=true
+LIGHTCLAW_BROWSER_BACKEND=playwright
+LIGHTCLAW_BROWSER_HEADLESS=true
+LIGHTCLAW_BROWSER_ALLOWED_DOMAINS=wttr.in,mail.google.com,example.com
+LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH=false
+LIGHTCLAW_BROWSER_PROFILE_ROOT=.lightclaw/browser
+LIGHTCLAW_MAIL_WEB_PROVIDER=gmail
+LIGHTCLAW_WEATHER_URL_TEMPLATE=https://wttr.in/{location}
+```
+
+Install the browser dependencies into `.venv`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uv sync --extra browser --extra dev
+.\.venv\Scripts\python.exe -m playwright install chromium
+```
+
+Run a smoke check against a real page:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-browser-smoke.ps1 --url https://example.com
+```
+
+Run a visible browser for manual debugging:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-browser-smoke.ps1 --headed --url https://example.com
+```
+
+Current real-page guidance:
+
+- use `example.com` first to verify Playwright boot, navigation, and DOM extraction
+- use `wttr.in` for weather flows after network access is confirmed
+- use persistent profiles only for manual-authenticated mail sessions
+- Gmail web send automation may require a one-time manual login in a persistent profile
+
 ## Database Commands
 
 Migration files live under [src/lightclaw/infrastructure/persistence/migration_files](/E:/西电/研二/dmx/lightClaw/src/lightclaw/infrastructure/persistence/migration_files).

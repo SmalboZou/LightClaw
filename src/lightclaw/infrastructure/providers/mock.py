@@ -77,6 +77,30 @@ class MockProvider(ModelProvider):
         if tool_name == "http.fetch":
             url = remainder or "https://example.com"
             return ToolCall(name=tool_name, arguments={"url": url})
+        if tool_name == "browser.open":
+            parts = shlex.split(remainder, posix=False) if remainder else []
+            session_name = parts[0] if parts else "browser-session"
+            start_url = parts[1] if len(parts) > 1 else None
+            payload = {"session_name": session_name}
+            if start_url:
+                payload["start_url"] = start_url
+            return ToolCall(name=tool_name, arguments=payload)
+        if tool_name == "browser.navigate":
+            parts = shlex.split(remainder, posix=False) if remainder else []
+            return ToolCall(
+                name=tool_name,
+                arguments={
+                    "session_id": parts[0] if parts else "missing-session",
+                    "url": parts[1] if len(parts) > 1 else "https://example.com",
+                },
+            )
+        if tool_name in {"browser.snapshot", "browser.close"}:
+            return ToolCall(
+                name=tool_name,
+                arguments={"session_id": remainder or "missing-session"},
+            )
+        if tool_name == "weather.lookup_web":
+            return ToolCall(name=tool_name, arguments={"location": remainder or "beijing"})
 
         return ToolCall(
             name=tool_name,

@@ -87,6 +87,7 @@ def test_shell_exec_tool_rejects_disallowed_command() -> None:
             workspace_root=tmp_path,
             allow_process_exec=True,
             allowed_commands=["allowed-only"],
+            provider_backend="mock",
         )
     )
 
@@ -142,6 +143,7 @@ def test_chat_service_validates_tool_arguments_before_execution() -> None:
             storage_backend="memory",
             workspace_root=workspace,
             allow_process_exec=True,
+            provider_backend="mock",
         )
     )
 
@@ -178,6 +180,7 @@ def test_chat_service_shapes_large_and_sensitive_tool_output() -> None:
             AppSettings(
                 storage_backend="memory",
                 workspace_root=workspace,
+                provider_backend="mock",
             )
         )
 

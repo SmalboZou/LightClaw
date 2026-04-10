@@ -15,6 +15,7 @@ from lightclaw.infrastructure.mcp.tool_registry import MCPToolRegistry
 from lightclaw.infrastructure.skills.filesystem_registry import FilesystemSkillRegistry
 from lightclaw.infrastructure.memory.in_memory import InMemoryMemoryStore
 from lightclaw.infrastructure.memory.sqlalchemy_store import SqlAlchemyMemoryStore
+from lightclaw.infrastructure.browser.service import build_browser_service
 from lightclaw.infrastructure.persistence.database import create_session_factory
 from lightclaw.infrastructure.sessions.in_memory import InMemorySessionStore
 from lightclaw.infrastructure.sessions.sqlalchemy_store import SqlAlchemySessionStore
@@ -54,7 +55,8 @@ class ApplicationContainer:
             metadata_root / "console_ownership.json",
             self.db_session_factory,
         )
-        local_tool_registry = InMemoryToolRegistry()
+        self.browser_service = build_browser_service(settings.browser_backend)
+        local_tool_registry = InMemoryToolRegistry(browser_service=self.browser_service)
         self.mcp_client = FilesystemMCPClient(settings.mcp_servers_root)
         self.mcp_tool_registry = MCPToolRegistry(self.mcp_client)
         self.tool_registry = CompositeToolRegistry(

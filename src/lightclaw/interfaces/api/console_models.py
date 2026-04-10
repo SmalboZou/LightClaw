@@ -17,6 +17,14 @@ class ConsoleConfigResponse(BaseModel):
     tool_policy: str
     allow_process_exec: bool
     allow_network_access: bool
+    browser_enabled: bool = False
+    browser_backend: str = "mock"
+    browser_headless: bool = True
+    browser_allowed_domains: list[str] = Field(default_factory=list)
+    browser_allow_persistent_auth: bool = False
+    browser_profile_root: str | None = None
+    mail_web_provider: str = "gmail"
+    weather_url_template: str
     feishu_app_id: str | None = None
     feishu_app_secret_masked: str | None = None
     has_feishu_app_secret: bool = False
@@ -41,6 +49,14 @@ class ConsoleConfigUpdatePayload(BaseModel):
     tool_policy: str = "workspace_write"
     allow_process_exec: bool = False
     allow_network_access: bool = False
+    browser_enabled: bool = False
+    browser_backend: str = "mock"
+    browser_headless: bool = True
+    browser_allowed_domains: list[str] = Field(default_factory=list)
+    browser_allow_persistent_auth: bool = False
+    browser_profile_root: str | None = None
+    mail_web_provider: str = "gmail"
+    weather_url_template: str = "https://wttr.in/{location}"
     feishu_app_id: str | None = None
     feishu_app_secret: str | None = None
     feishu_verification_token: str | None = None
@@ -63,6 +79,14 @@ class RuntimeConfigSummaryResponse(BaseModel):
     tool_policy: str
     allow_process_exec: bool
     allow_network_access: bool
+    browser_enabled: bool = False
+    browser_backend: str = "mock"
+    browser_headless: bool = True
+    browser_allowed_domains: list[str] = Field(default_factory=list)
+    browser_allow_persistent_auth: bool = False
+    browser_profile_root: str | None = None
+    mail_web_provider: str = "gmail"
+    weather_url_template: str
 
 
 class ConsoleRuntimeStatusResponse(BaseModel):
@@ -158,6 +182,14 @@ class ConsoleBootstrapPayload(BaseModel):
     tool_policy: str = "workspace_write"
     allow_process_exec: bool = False
     allow_network_access: bool = False
+    browser_enabled: bool = False
+    browser_backend: str = "mock"
+    browser_headless: bool = True
+    browser_allowed_domains: list[str] = Field(default_factory=list)
+    browser_allow_persistent_auth: bool = False
+    browser_profile_root: str | None = None
+    mail_web_provider: str = "gmail"
+    weather_url_template: str = "https://wttr.in/{location}"
     feishu_app_id: str | None = None
     feishu_app_secret: str | None = None
     feishu_verification_token: str | None = None

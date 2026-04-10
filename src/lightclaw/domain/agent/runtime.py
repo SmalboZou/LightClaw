@@ -201,6 +201,15 @@ class AgentRuntime:
             allow_process_exec=self._policy.allow_process_exec,
             allow_network_access=self._policy.allow_network_access,
             allowed_commands=self._policy.allowed_commands,
+            browser_enabled=self._policy.browser_enabled,
+            browser_backend=self._policy.browser_backend,
+            browser_headless=self._policy.browser_headless,
+            browser_allowed_domains=self._policy.browser_allowed_domains,
+            browser_allow_persistent_auth=self._policy.browser_allow_persistent_auth,
+            browser_profile_root=self._policy.browser_profile_root,
+            mail_web_provider=self._policy.mail_web_provider,
+            weather_url_template=self._policy.weather_url_template,
+            event_logger=self._execution_log_store,
             history=[
                 {"role": turn.role, "content": turn.content, "name": turn.name}
                 for turn in working_history

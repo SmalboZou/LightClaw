@@ -21,6 +21,14 @@ class ConfigService:
         "LIGHTCLAW_TOOL_POLICY",
         "LIGHTCLAW_ALLOW_PROCESS_EXEC",
         "LIGHTCLAW_ALLOW_NETWORK_ACCESS",
+        "LIGHTCLAW_BROWSER_ENABLED",
+        "LIGHTCLAW_BROWSER_BACKEND",
+        "LIGHTCLAW_BROWSER_HEADLESS",
+        "LIGHTCLAW_BROWSER_ALLOWED_DOMAINS",
+        "LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH",
+        "LIGHTCLAW_BROWSER_PROFILE_ROOT",
+        "LIGHTCLAW_MAIL_WEB_PROVIDER",
+        "LIGHTCLAW_WEATHER_URL_TEMPLATE",
         "LIGHTCLAW_FEISHU_APP_ID",
         "LIGHTCLAW_FEISHU_APP_SECRET",
         "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN",
@@ -45,6 +53,14 @@ class ConfigService:
         "LIGHTCLAW_TOOL_POLICY": "tool_policy",
         "LIGHTCLAW_ALLOW_PROCESS_EXEC": "allow_process_exec",
         "LIGHTCLAW_ALLOW_NETWORK_ACCESS": "allow_network_access",
+        "LIGHTCLAW_BROWSER_ENABLED": "browser_enabled",
+        "LIGHTCLAW_BROWSER_BACKEND": "browser_backend",
+        "LIGHTCLAW_BROWSER_HEADLESS": "browser_headless",
+        "LIGHTCLAW_BROWSER_ALLOWED_DOMAINS": "browser_allowed_domains",
+        "LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH": "browser_allow_persistent_auth",
+        "LIGHTCLAW_BROWSER_PROFILE_ROOT": "browser_profile_root",
+        "LIGHTCLAW_MAIL_WEB_PROVIDER": "mail_web_provider",
+        "LIGHTCLAW_WEATHER_URL_TEMPLATE": "weather_url_template",
         "LIGHTCLAW_FEISHU_APP_ID": "feishu_app_id",
         "LIGHTCLAW_FEISHU_APP_SECRET": "feishu_app_secret",
         "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN": "feishu_verification_token",
@@ -80,6 +96,14 @@ class ConfigService:
             "tool_policy": self._settings.tool_policy,
             "allow_process_exec": self._settings.allow_process_exec,
             "allow_network_access": self._settings.allow_network_access,
+            "browser_enabled": self._settings.browser_enabled,
+            "browser_backend": self._settings.browser_backend,
+            "browser_headless": self._settings.browser_headless,
+            "browser_allowed_domains": list(self._settings.browser_allowed_domains),
+            "browser_allow_persistent_auth": self._settings.browser_allow_persistent_auth,
+            "browser_profile_root": str(self._settings.browser_profile_root) if self._settings.browser_profile_root else None,
+            "mail_web_provider": self._settings.mail_web_provider,
+            "weather_url_template": self._settings.weather_url_template,
             "feishu_app_id": self._settings.feishu_app_id,
             "feishu_app_secret_masked": _mask_secret(self._settings.feishu_app_secret),
             "has_feishu_app_secret": bool(self._settings.feishu_app_secret),
@@ -107,6 +131,14 @@ class ConfigService:
             "tool_policy": self._settings.tool_policy,
             "allow_process_exec": self._settings.allow_process_exec,
             "allow_network_access": self._settings.allow_network_access,
+            "browser_enabled": self._settings.browser_enabled,
+            "browser_backend": self._settings.browser_backend,
+            "browser_headless": self._settings.browser_headless,
+            "browser_allowed_domains": list(self._settings.browser_allowed_domains),
+            "browser_allow_persistent_auth": self._settings.browser_allow_persistent_auth,
+            "browser_profile_root": str(self._settings.browser_profile_root) if self._settings.browser_profile_root else None,
+            "mail_web_provider": self._settings.mail_web_provider,
+            "weather_url_template": self._settings.weather_url_template,
         }
         desired_summary = {
             "provider_backend": desired_config.get("LIGHTCLAW_PROVIDER_BACKEND", active_config["provider_backend"]),
@@ -118,6 +150,24 @@ class ConfigService:
             "tool_policy": desired_config.get("LIGHTCLAW_TOOL_POLICY", active_config["tool_policy"]),
             "allow_process_exec": desired_config.get("LIGHTCLAW_ALLOW_PROCESS_EXEC", str(active_config["allow_process_exec"]).lower()) == "true",
             "allow_network_access": desired_config.get("LIGHTCLAW_ALLOW_NETWORK_ACCESS", str(active_config["allow_network_access"]).lower()) == "true",
+            "browser_enabled": desired_config.get("LIGHTCLAW_BROWSER_ENABLED", str(active_config["browser_enabled"]).lower()) == "true",
+            "browser_backend": desired_config.get("LIGHTCLAW_BROWSER_BACKEND", active_config["browser_backend"]),
+            "browser_headless": desired_config.get("LIGHTCLAW_BROWSER_HEADLESS", str(active_config["browser_headless"]).lower()) == "true",
+            "browser_allowed_domains": _parse_csv_list(
+                desired_config.get(
+                    "LIGHTCLAW_BROWSER_ALLOWED_DOMAINS",
+                    ",".join(active_config["browser_allowed_domains"]),
+                )
+            ),
+            "browser_allow_persistent_auth": desired_config.get(
+                "LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH",
+                str(active_config["browser_allow_persistent_auth"]).lower(),
+            ) == "true",
+            "browser_profile_root": _normalize_optional_text(
+                desired_config.get("LIGHTCLAW_BROWSER_PROFILE_ROOT", active_config["browser_profile_root"])
+            ),
+            "mail_web_provider": desired_config.get("LIGHTCLAW_MAIL_WEB_PROVIDER", active_config["mail_web_provider"]),
+            "weather_url_template": desired_config.get("LIGHTCLAW_WEATHER_URL_TEMPLATE", active_config["weather_url_template"]),
         }
         desired_matches_active = desired_summary == active_config
         return {
@@ -137,6 +187,8 @@ class ConfigService:
         feishu_app_secret = str(payload.get("feishu_app_secret") or "").strip()
         feishu_verification_token = str(payload.get("feishu_verification_token") or "").strip()
         feishu_encrypt_key = str(payload.get("feishu_encrypt_key") or "").strip()
+        browser_profile_root = _normalize_optional_text(payload.get("browser_profile_root"))
+        browser_allowed_domains = _normalize_domain_list(payload.get("browser_allowed_domains"))
         next_storage_backend = str(payload.get("storage_backend") or "sqlite")
         updates = {
             "LIGHTCLAW_PROVIDER_BACKEND": str(payload.get("provider_backend") or "mock"),
@@ -152,6 +204,18 @@ class ConfigService:
             "LIGHTCLAW_ALLOW_NETWORK_ACCESS": str(
                 bool(payload.get("allow_network_access", False))
             ).lower(),
+            "LIGHTCLAW_BROWSER_ENABLED": str(bool(payload.get("browser_enabled", False))).lower(),
+            "LIGHTCLAW_BROWSER_BACKEND": str(payload.get("browser_backend") or "mock"),
+            "LIGHTCLAW_BROWSER_HEADLESS": str(bool(payload.get("browser_headless", True))).lower(),
+            "LIGHTCLAW_BROWSER_ALLOWED_DOMAINS": ",".join(browser_allowed_domains),
+            "LIGHTCLAW_BROWSER_ALLOW_PERSISTENT_AUTH": str(
+                bool(payload.get("browser_allow_persistent_auth", False))
+            ).lower(),
+            "LIGHTCLAW_BROWSER_PROFILE_ROOT": browser_profile_root or str(self._settings.browser_profile_root or ""),
+            "LIGHTCLAW_MAIL_WEB_PROVIDER": str(payload.get("mail_web_provider") or "gmail"),
+            "LIGHTCLAW_WEATHER_URL_TEMPLATE": str(
+                payload.get("weather_url_template") or self._settings.weather_url_template
+            ),
             "LIGHTCLAW_FEISHU_APP_ID": feishu_app_id,
             "LIGHTCLAW_FEISHU_APP_SECRET": feishu_app_secret or str(self._settings.feishu_app_secret or ""),
             "LIGHTCLAW_FEISHU_VERIFICATION_TOKEN": feishu_verification_token
@@ -184,6 +248,14 @@ class ConfigService:
             "provider_base_url": settings.provider_base_url or "",
             "storage_backend": settings.storage_backend,
             "tool_policy": settings.tool_policy,
+            "browser_enabled": str(settings.browser_enabled).lower(),
+            "browser_backend": settings.browser_backend,
+            "browser_headless": str(settings.browser_headless).lower(),
+            "browser_allowed_domains": ",".join(settings.browser_allowed_domains),
+            "browser_allow_persistent_auth": str(settings.browser_allow_persistent_auth).lower(),
+            "browser_profile_root": str(settings.browser_profile_root or ""),
+            "mail_web_provider": settings.mail_web_provider,
+            "weather_url_template": settings.weather_url_template,
         }
         if self._session_factory is not None:
             with self._session_factory() as session:
@@ -307,6 +379,21 @@ def _normalize_optional_text(value: object) -> str | None:
     return text or None
 
 
+def _parse_csv_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _normalize_domain_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip().lower() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    return [item.strip().lower() for item in text.split(",") if item.strip()]
+
+
 def hydrate_settings_from_runtime_config(settings: AppSettings) -> AppSettings:
     if settings.storage_backend != "sqlite":
         return settings
@@ -333,6 +420,14 @@ def hydrate_settings_from_runtime_config(settings: AppSettings) -> AppSettings:
         "tool_timeout_seconds": settings.tool_timeout_seconds,
         "scheduler_enabled": settings.scheduler_enabled,
         "scheduler_poll_seconds": settings.scheduler_poll_seconds,
+        "browser_enabled": settings.browser_enabled,
+        "browser_backend": settings.browser_backend,
+        "browser_headless": settings.browser_headless,
+        "browser_allowed_domains": settings.browser_allowed_domains,
+        "browser_allow_persistent_auth": settings.browser_allow_persistent_auth,
+        "browser_profile_root": settings.browser_profile_root,
+        "mail_web_provider": settings.mail_web_provider,
+        "weather_url_template": settings.weather_url_template,
         "telegram_bot_token": settings.telegram_bot_token,
         "telegram_webhook_secret": settings.telegram_webhook_secret,
         "feishu_app_id": settings.feishu_app_id,
@@ -345,11 +440,20 @@ def hydrate_settings_from_runtime_config(settings: AppSettings) -> AppSettings:
         if env_key not in values:
             continue
         raw_value = values[env_key]
-        if setting_key in {"allow_process_exec", "allow_network_access"}:
+        if setting_key in {
+            "allow_process_exec",
+            "allow_network_access",
+            "browser_enabled",
+            "browser_headless",
+            "browser_allow_persistent_auth",
+        }:
             overrides[setting_key] = raw_value.lower() == "true"
+        elif setting_key == "browser_allowed_domains":
+            overrides[setting_key] = _parse_csv_list(raw_value)
         elif setting_key in {
             "provider_base_url",
             "provider_api_key",
+            "browser_profile_root",
             "feishu_app_id",
             "feishu_app_secret",
             "feishu_verification_token",
